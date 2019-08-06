@@ -263,7 +263,7 @@ Matcher是一个流水线系统的调度器和逻辑匹配器，它们对比特�
 	
 		running uint32 // Atomic flag whether a session is live or not
 	}
-
+partialMatches 表示部分匹配的结果，Retrieval 表示一次区块布隆过滤器的检索工作，在使用过程中，该对象会被发送给 eth/bloombits.go 中的 startBloomHandlers 来处理，该方法从数据库中加载布隆过滤器索引，然后放在 Bitsets 里返回（待确认）。Matcher 是一个操作调度器（scheduler）和匹配器（matcher）的流水线系统，它会对比特流进行二进制的与/或操作，对数据内容进行检索，创建可能的区块。
 
 matcher的大体流程图片，途中椭圆代表goroutine. 矩形代表channel。 三角形代表方法调用。
 
@@ -450,7 +450,9 @@ Start 启动
 		}()
 		return session, nil
 	}
+Start 方法首先启动一个 session，这个 session 会被返回，它可以用来管理日志过滤的生命周期，调用者会将它作为 ServiceFilter 的参数，根据 bloomFilterThreads 这个常数值（默认为3），启动 bloomFilterThreads 个 session 的 Multiplex，该方法会不断地从 distributor 领取任务，将任务投递给 bloomRequest 队列，从队列中获取结果，然后投递给 distributor，这个 Multiplex 非常重要。
 
+接下来会调用 run 方法，该方法会返回一个 channel，该 channel 会一直返回搜索的结果，直到返回一个退出的信号，Start 方法才会结束，对于过滤的结果，其中包括 section 和 bitmap，bitmap 表明了 section 中哪些区块可能存在值，这时需要遍历这个 bitmap，找到被置位的区块，然后把区块号返回到 results 通道
 
 run方法
 
@@ -496,7 +498,7 @@ run方法
 	
 		return next
 	}
-
+run 方法会创建一个子匹配器的流水线，一个用于地址集合，一个用于 topic 集合。之所以称为流水线是因为它会一个一个地调用子匹配器，之前的子匹配器找到了匹配的区块后才会调用下一个子匹配器，接收到的结果会与自身结果匹配后结合，发到下一个子匹配器。最终返回一个接收结果的接收器通道。该方法首先起一个 go routine, 构造 subMatch 的第一个输入源，这个源的 bitset 字段是 0xff，表示完全匹配，这个结果会作为第一个子匹配器的输入。在结尾还会用新线程的方式调用 distributor，
 
 subMatch函数
 
@@ -641,6 +643,9 @@ subMatch函数
 		}()
 		return results
 	}
+subMatch 会创建一个子匹配器，用于过滤一组 address 或 topic，在组内会进行 bit 位的或操作，然后将上一个结果与当前过滤结果进行位的与操作，如果结果不全为空，结果传递到下一个子匹配器。每个 address/topic 的匹配通过获取属于该 address/topics 的三个布隆过滤器位索引的给定部分以及这些向量二进制做与的运算。
+
+注意这里的 bloom 参数的类型是 []bloomIndexes，首先根据这个值创建相应个数的 schedulers，调用其对应的 run 方法。前面我们有介绍 schedulers 的 run 方法，它的作用是根据后端的实现（从硬盘或网络中）执行过滤操作，结果可以通过调用 scheduler 的 deliver 获得。
 
 distributor,接受来自scheduler的请求，并把他们放到一个set里面。 然后把这些任务指派给retrievers来填充他们。
 	
