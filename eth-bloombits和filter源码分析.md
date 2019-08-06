@@ -505,7 +505,7 @@ Logs 执行过滤
 		logs = append(logs, rest...)
 		return logs, err
 	}
-
+Logs 会从区块链中找到匹配的 log 项。首先根据最新的区块号拿到最新区块，这样如果没有 end 参数的，搜索的区间的 end 就是最新区块。接着调用 BloomStatus() 拿到索引的状态，需要注意的是，尽管每个区块头都有 logBloom，日志的过滤不会直接依次检索这些区块头的 logBloom，因为遍历区块头的话效率太低了，需要多次的磁盘 IO，geth 会在 LevelDB 里维护另一套索引，以4096个区块为一个 section，在一个 section 内的 logBloom 会存在一起，所以对于位于已索引的区块这一区间的搜索，会调用 indexedLogs 进行搜索，对于在已索引区间外的区块，会调用 unindexedLogs 进行搜索。
 
 索引搜索
 
@@ -551,8 +551,9 @@ Logs 执行过滤
 			}
 		}
 	}
+indexedLogs 会调用 Matcher 的 Start 方法启动 session，其结果会返回到 matches 这个 channel 里，找到区块后，通过调用 checkMatches 以验证该区块确实在区块链中（因为布隆过滤器有一定几率误判），验证完成后，结果会增加到 logs 这个变量中，直到接收到 Done 消息，然后返回 logs。
 
-checkMatches,拿到所有的收据，并从收据中拿到所有的日志。 执行filterLogs方法。
+checkMatches,checkMatches 做的事情简单来说就是根据 header 的哈希值，从 backend 拿到所有的收据，然后调用 filterLogs 对 topics 一一进行匹配，匹配上了则可以确定该 logs 确实在区块链中（布隆过滤器没有误判）。
 	
 	// checkMatches checks if the receipts belonging to the given header contain any log events that
 	// match the filter criteria. This function is called when the bloom filter signals a potential match.
