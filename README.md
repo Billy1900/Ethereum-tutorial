@@ -23,6 +23,7 @@
 	- [core/blockchain.go](/core-blockchain源码分析.md)
 	- [core/tx_list.go](/core-txlist交易池的一些数据结构源码分析.md)
 	- [core/tx_pool.go](/core-txpool交易池源码分析.md)
+	- [core/genesis.go](/core-genesis创世区块源码分析.md)
 	- [区块链索引 chain_indexer源码分析](/core-chain_indexer源码解析.md)
 	- [布隆过滤器索引 bloombits源码分析](/core-bloombits源码分析.md)
 	- [以太坊的trie树管理 回滚等操作 state源码分析](/core-state源码分析.md)
@@ -31,7 +32,6 @@
 		- [虚拟机堆栈和内存数据结构分析](/core-vm-stack-memory源码分析.md)
 		- [虚拟机指令,跳转表,解释器源码分析](/core-vm-jumptable-instruction.md)
 		- [虚拟机源码分析](/core-vm源码分析.md)
-	- [创世区块的源码分析](/core-genesis创世区块源码分析.md)
 - [pow一致性算法](/pow一致性算法.md)
 - [以太坊测试网络Clique_PoA介绍](/以太坊测试网络Clique_PoA介绍.md)
 
