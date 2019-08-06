@@ -214,6 +214,7 @@ SetCode	，SetCallCode 设置代码。
 		// NOTE: must be set atomically
 		abort int32
 	}
+Context 给 EVM 提供运行合约的上下文信息，其中 CanTransfer 是返回账户是否有足够余额的函数，Transfer 可以用来完成转账操作，GetHash 返回第 n 个区块的哈希值。其他的属性在之前文章有过描述，代码中也有注释，这里不再赘述。EVM 结构体中稍值得一提的是 interpreter，它根据代码以及 jump_table 中对应的指令逐条执行合约.
 
 构造函数
 	
@@ -239,7 +240,7 @@ SetCode	，SetCallCode 设置代码。
 	}
 
 
-合约创建 Create 会创建一个新的合约。
+合约创建 Create 会创建一个新的合约。首先会进行一系列验证，调用栈的深度不能超过 1024；调用的账户有足够多的余额；对调用者地址的 nonce+1，通过地址和 nonce 生成合约地址，通过合约地址获取合约哈希值，确保调用的地址不能已经存在合约。接着利用 StateDB 创建一个快照，如果之后的调用出现问题可以回滚。在进行了这一系列初始化之后，发起一笔转账操作，发送方地址余额减 value 值，合约账户的余额加 value 值，接着通过调用 contract 的 SetCallCode ，根据发送方地址，合约地址，金额 value，gas，合约代码，代码哈希初始化合约对象，然后调用 run(evm, contract, nil)执行合约的初始化代码，这个生成的代码有一定的长度限制，当合约创建成功，没有错误返回，则计算存储代码所需的 gas，如果没有足够 gas 则进行报错。之后就是错误处理了，如果存在错误，需要回滚到之前创建的状态快照，没有错误则返回创建成功。可以看到，合约代码通过 state 模块的 SetCode，保存在账户中 codehash 指向的存储区域，这部分的代码都属于对世界状态的修改。
 
 	
 	// Create creates a new contract using code as deployment code.
@@ -316,7 +317,7 @@ SetCode	，SetCallCode 设置代码。
 	}
 
 
-Call方法, 无论我们转账或者是执行合约代码都会调用到这里， 同时合约里面的call指令也会执行到这里。
+Call方法, 无论我们转账或者是执行合约代码都会调用到这里， 同时合约里面的call指令也会执行到这里。和 Create 方法类似，不过 Create 方法的资金转移发生在创建合约用户账户和合约账户之间，而 Call 方法的资金转移发生在合约发送方和合约接收方之间。Call 方法需要先检查合约调用深度；确保账户有足够余额；调用 Call 方法的可能是一个转账操作，也可能是一个运行合约的操作，所以接下来会通过 StateDB 查看指定的地址是否存在，如果不存在的话，接着查看该地址是否为内置合约，这些预编译的合约在 core/vm/constracts.go 中定义，主要是用于加密操作，如果本地确实没有合约接收方的账户，创建一个接收方的账户，更新本地的状态数据库。接着 evm 会调用 Transfer 方法（即 Context 里的 TransferFunc）进行转账。最后，通过 StateDB 的 GetCode 拿到该地址对应的代码，通过 run(evm, contract, input) 运行合约，如果是单纯的转账，通过 GetCode 拿到的代码是空，自然也没有合约的运行。这一步完成后，就可以返回执行结果了。合约产生的 gas 总数会加入到矿工账户，作为矿工收入。
 
 	
 	// Call executes the contract associated with the addr with the given input as
@@ -511,3 +512,91 @@ DelegateCall
 		}
 		return ret, contract.Gas, err
 	}
+
+<pre><code>func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, err error) {
+	in.evm.depth++
+	defer func() { in.evm.depth-- }()
+	in.returnData = nil
+	if len(contract.Code) == 0 {
+		return nil, nil
+	}
+	var (
+		op    OpCode
+		mem   = NewMemory()
+		stack = newstack()
+		pc   = uint64(0)
+		cost uint64
+		pcCopy  uint64
+		gasCopy uint64
+		logged  bool
+	)
+	contract.Input = input
+	if in.cfg.Debug {
+		defer func() {
+			if err != nil {
+				if !logged {
+					in.cfg.Tracer.CaptureState(in.evm, pcCopy, op, gasCopy, cost, mem, stack, contract, in.evm.depth, err)
+				} else {
+					in.cfg.Tracer.CaptureFault(in.evm, pcCopy, op, gasCopy, cost, mem, stack, contract, in.evm.depth, err)
+				}
+			}
+		}()
+	}
+	for atomic.LoadInt32(&in.evm.abort) == 0 {
+		if in.cfg.Debug {
+			logged, pcCopy, gasCopy = false, pc, contract.Gas
+		}
+		
+		op = contract.GetOp(pc)
+		operation := in.cfg.JumpTable[op]
+		if !operation.valid {
+			return nil, fmt.Errorf("invalid opcode 0x%x", int(op))
+		}
+		if err := operation.validateStack(stack); err != nil {
+			return nil, err
+		}
+		if err := in.enforceRestrictions(op, operation, stack); err != nil {
+			return nil, err
+		}
+		var memorySize uint64
+		if operation.memorySize != nil {
+			memSize, overflow := bigUint64(operation.memorySize(stack))
+			if overflow {
+				return nil, errGasUintOverflow
+			}
+			if memorySize, overflow = math.SafeMul(toWordSize(memSize), 32); overflow {
+				return nil, errGasUintOverflow
+			}
+		}
+		cost, err = operation.gasCost(in.gasTable, in.evm, contract, stack, mem, memorySize)
+		if err != nil || !contract.UseGas(cost) {
+			return nil, ErrOutOfGas
+		}
+		if memorySize > 0 {
+			mem.Resize(memorySize)
+		}
+		if in.cfg.Debug {
+			in.cfg.Tracer.CaptureState(in.evm, pc, op, gasCopy, cost, mem, stack, contract, in.evm.depth, err)
+			logged = true
+		}
+		res, err := operation.execute(&pc, in.evm, contract, mem, stack)
+		if verifyPool {
+			verifyIntegerPool(in.intPool)
+		}
+		if operation.returns {
+			in.returnData = res
+		}
+		switch {
+		case err != nil:
+			return nil, err
+		case operation.reverts:
+			return res, errExecutionReverted
+		case operation.halts:
+			return res, nil
+		case !operation.jumps:
+			pc++
+		}
+	}
+	return nil, nil
+}</code></pre>
+Run 方法会循环执行合约的代码，主要逻辑在 for 循环中，直到遇到 STOP，RETURN，SELFDESTRUCT 指令被执行，或者是遇到任意错误，或者说 done 标志被父 context 设置。这个循环才会结束。大致的执行过程是首先通过 op = contract.GetOp(pc) 拿到下一个需要执行的指令，接着通过 operation := in.cfg.JumpTable[op] 拿到对应的 operation，operation 的类型在 core/vm/jump_table.go 中定义，其中包括指令对应的方法，计算 gas 的方法，验证栈溢出的方法，计算内存的方法等。进行一系列检查后再通过 operation.execute 执行指令。最后一个指令的执行结果会决定整个合约代码的执行结果。
