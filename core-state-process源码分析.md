@@ -1,7 +1,9 @@
-## StateTransition
+## StateTransition.go
 状态转换模型
 
+Process 部分的代码是插入区块时被调用的，而我们发现 Process 在处理每一个交易时，最终会调用 core/state_transition.go 中的 Finalise，实际上，如果说 core/state_processor.go 是用来处理区块级别的交易，那么可以说 core/state_transition.go 是用来处理一个一个的交易，最终将获得世界状态，收据，gas 等信息。
 
+Transition 完成世界状态转换的工作，它会利用世界状态来执行交易，然后改变当前的世界状态。
 
 	/*
 	The State Transitioning Model
@@ -85,7 +87,7 @@
 		return ret, gasUsed, failed, err
 	}
 
-TransitionDb
+> TransitionDb,TransitionDb 首先会调用 preCheck，preCheck 的作用是检测 Nonce 的值是否正确，然后通过 buyGas() 购买 Gas.在 preCheck() 之后，会调用 IntrinsicGas 方法，计算交易的固有 Gas 消耗，这个消耗有两部分，一部分是交易（或创建合约）预设消耗量，一部分是根据交易 data 的非0字节和0字节长度决定的消耗量，TransitionDb 方法中最终会从 gas 中减去这笔消耗。再接下来就是 EVM 的执行，如果是创建合约，调用的是 evm.Create(sender, st.data, st.gas, st.value)，如果是普通的交易，调用的是 evm.Call(sender, st.to(), st.data, st.gas, st.value)，这两个方法同样也会消耗 gas。接着调用 refundGas 方法执行退 gas 的操作。refundGas 首先会将用户剩下的 gas 还回去，但退回的金额不会超过用户使用的 gas 的 1/2。TransitionDb 最后会通过 st.state.AddBalance 奖励区块的挖掘者，这笔钱等于 gasPrice*(initialGas-gas)，至此，这个交易的 gas 消耗量计算就完成了
 	
 	// TransitionDb will transition the state by applying the current message and returning the result
 	// including the required gas for the operation as well as the used gas. It returns an error if it
@@ -246,7 +248,7 @@ buyGas， 实现Gas的预扣费，  首先就扣除你的GasLimit * GasPrice的�
 	}
 
 
-## StateProcessor
+## StateProcessor.go
 StateTransition是用来处理一个一个的交易的。那么StateProcessor就是用来处理区块级别的交易的。
 
 结构和构造
@@ -271,7 +273,9 @@ StateTransition是用来处理一个一个的交易的。那么StateProcessor就
 	}
 
 
-Process，这个方法会被blockchain调用。
+Process，这个方法会被blockchain调用,Process 根据以太坊规则运行交易来对改变 statedb 的状态，以奖励挖矿者或其他的叔父节点。Process 会返回执行过程中累计的收据和日志，并返回过程中使用的 gas，如果 gas 不足导致任何交易执行失败，返回错误。
+
+Process 首先会声明变量，值得注意的是 GasPool 变量，它告诉你剩下还有多少 Gas 可以使用，在每一个交易的执行过程中，以太坊设计了 refund 的机制进行处理，偿还的 gas 也会加到 GasPool 中。接着处理 DAO 事件的硬分叉，接着遍历区块中的所有交易，通过调用 ApplyTransaction 获得每个交易的收据。这个过程结束后，调用一致性引擎的 Finalize，拿到区块奖励或叔块奖励，最终将世界状态写入到区块链中，也就是说 stateTrie 随着每次交易的执行变化，
 	
 	// Process processes the state changes according to the Ethereum rules by running
 	// the transaction messages using the statedb and applying any rewards to both
@@ -310,7 +314,9 @@ Process，这个方法会被blockchain调用。
 		return receipts, allLogs, totalUsedGas, nil
 	}
 
-ApplyTransaction
+ApplyTransaction,对于每个交易，都会创建一个新的虚拟机环境，即根据输入参数封装 EVM 对象，接着调用 ApplyMessage 将交易应用于当前的状态中，Finalise 方法会调用 update 方法，将存放在 cache 的修改写入 trie 数据库中，返回的是使用的 gas，这部分代码涉及到 core/state_transition.go。
+
+接着，如果是拜占庭硬分叉，直接调用 statedb.Finalise(true)，否则调用 statedb.IntermediateRoot(config.IsEIP158(header.Number)).Bytes()，最后，初始化一个收据对象，其 TxHash 为交易哈希，Logs 字段通过 statedb.GetLogs(tx.Hash()) 拿到，Bloom 字段通过 types.CreateBloom(types.Receipts{receipt}) 创建，最后返回收据和消耗的 gas。
 	
 	// ApplyTransaction attempts to apply a transaction to the given state database
 	// and uses the input parameters for its environment. It returns the receipt
