@@ -1,7 +1,8 @@
+# miner模块
 ## agent
 agent 是具体执行挖矿的对象。 它执行的流程就是，接受计算好了的区块头， 计算mixhash和nonce， 把挖矿好的区块头返回。
 
-构造CpuAgent, 一般情况下不会使用CPU来进行挖矿，一般来说挖矿都是使用的专门的GPU进行挖矿， GPU挖矿的代码不会在这里体现。
+构造CpuAgent, 一般情况下不会使用CPU来进行挖矿，一般来说挖矿都是使用的专门的GPU进行挖矿。
 
 	type CpuAgent struct {
 		mu sync.Mutex
@@ -495,7 +496,7 @@ worker
 		return worker
 	}
 
-update
+worker.update 会监听 ChainHeadEvent，ChainSideEvent，TxPreEvent 3个事件。通过 chainHeadCh, chainSideCh, txCh 这3个 channel 来实现。ChainHeadEvent 事件指的是区块链中已经加入一个新的区块作为链头，这时候 worker 会开始挖掘下一个区块(在代码库中搜索 ChainHeadEvent，可以在 blockchain.go 中的 L1191 看到该事件是怎么触发的)。ChainSideEvent 指区块链中加入了一个新区块作为当前链头的分支，woker 会把这个区块放在 possibleUncles 数组，作为下一个挖掘区块可能的 Uncle 之一。当一个新的交易 tx 被加入 TxPool 中，会触发 TxPreEvent，如果这时 worker 没有在挖矿，那么开始执行，并把 tx 加入到 Work.txs 数组中，下次挖掘新区块可以使用
 	
 	func (self *worker) update() {
 		defer self.txSub.Unsubscribe()
@@ -540,8 +541,53 @@ update
 		}
 	}
 
+worker.wait 执行挖完一个区块后的操作，通过 Result 这个 chan 实现，agent 完成挖矿后，从 chan 中获取 Block 和 Work 对象，Block 会被写到数据库中，加入本地的区块链，成为新的链头。完成这个操作后，会发送一条 NewMinedBlockEvent 事件，其他节点会决定是否接受这个新区块成为区块链新的链头。
+<pre><code>func (self *worker) wait() {
+	for {
+		mustCommitNewWork := true
+		for result := range self.recv {
+			atomic.AddInt32(&self.atWork, -1)
+			if result == nil {
+				continue
+			}
+			block := result.Block
+			work := result.Work
+			for _, r := range work.receipts {
+				for _, l := range r.Logs {
+					l.BlockHash = block.Hash()
+				}
+			}
+			for _, log := range work.state.Logs() {
+				log.BlockHash = block.Hash()
+			}
+			stat, err := self.chain.WriteBlockWithState(block, work.receipts, work.state)
+			if err != nil {
+				log.Error("Failed writing block to chain", "err", err)
+				continue
+			}
+			if stat == core.CanonStatTy {
+				mustCommitNewWork = false
+			}
+			log.Error("I got new block")
+			self.mux.Post(core.NewMinedBlockEvent{Block: block})
+			var (
+				events []interface{}
+				logs   = work.state.Logs()
+			)
+			events = append(events, core.ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
+			if stat == core.CanonStatTy {
+				events = append(events, core.ChainHeadEvent{Block: block})
+			}
+			self.chain.PostChainEvents(events, logs)
+			self.unconfirmed.(block.NumberU64(), block.Hash())
+			if mustCommitNewWork {
+				self.commitNewWork()
+			}
+		}
+	}
+}</code></pre>
 
-commitNewWork 提交新的任务
+commitNewWork 的作用是完成待挖掘区块的组装，最后通过 func (self *worker) push(p *Package) 让 agent 开始工作。具体来说，首先获取以系统当前时间作为新区块的时间，但要确保父区块的时间要早于新区块时间，否则进行 sleep 操作；接着构造区块头，确定父区块哈希值，当前区块编号，Gas 消耗数，附加数据，时间等，区块头的其他属性会在公式算法中确定；然后调用 engine.Prepare，准备好 Header 对象；处理 DAO 硬分叉的情况，增加附加数据；再接下来会从交易池里获取交易，加入到新区块的交易列表中，从 possibleUncles 获取叔区块；最后调用一致性引擎的 Finalize() 方法，给区块头增加 Root, TxHash, ReceiptHash 等属性，将创建的 Package 通过 channel 发送给 agent，进行挖矿操作。
 
 	
 	func (self *worker) commitNewWork() {
@@ -674,7 +720,7 @@ push方法，如果我们没有在挖矿，那么直接返回，否则把任务�
 		}
 	}
 
-makeCurrent，未当前的周期创建一个新的环境。
+makeCurrent，为当前的周期创建一个新的环境。
 	
 	// makeCurrent creates a new environment for the current cycle.
 	// 
@@ -965,7 +1011,7 @@ update订阅了downloader的事件， 注意这个goroutine是一个一次性的
 		}
 	}
 
-Start
+在 Miner struct 中有一个 worker 类型成员变量，它指向 worker 中的 Work struct，当我们需要开始挖矿时，我们通过 miner.Start() 开始（见 eth/backend.go 中的 StartMining，L358）。在设置好 coinbase 和等待网络同步完成后，继续调用 self.worker.start()。
 	
 	func (self *Miner) Start(coinbase common.Address) {
 		atomic.StoreInt32(&self.shouldStart, 1)  // shouldStart 是是否应该启动
