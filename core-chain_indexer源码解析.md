@@ -62,6 +62,27 @@ chain_indexer 顾名思义， 就是用来给区块链创建索引的功能。 �
 		log  log.Logger
 		lock sync.RWMutex
 	}
+首先需要了解一些定义，这部分代码中经常出现的 section 是指一组区块头，而这个一组的数量默认为 4096。
+
+ChainIndexerBackend 是一个接口，它定义了处理区块链 section 的方法，这个接口目前有 BloomIndexer 这个实现。其中 Reset(section uint64) 用来初始化一个新的区块链 section，可能会终止任何没有完成的操作；Process(header *types.Header) 对区块链 section 中的下一个区块头进行处理，增加新区块头到 index，调用者需要确保区块头的连续顺序；Commit() error 完成区块链 section 的元数据提交，并将其存储到数据库。
+
+以下是 ChainIndexer 结构体中较重要的一些属性：
+
+|属性|	描述|
+|---|---|
+|chainDb|区块链所在的数据库|
+|indexDb|	索引所在的数据库|
+|backend|	生成索引的后端，它实现了 ChainIndexerBacken 所定义的接口，这里的实现我们只探讨 eth/bloombits 中的 BloomIndexer，在 light 模式中有其他实现|
+|children|	子链的索引，这是为了处理临时分叉的情况|
+|active|	事件循环是否开始的标志|
+|update|	新生成区块头发送到这个 channel|
+|quit	|退出事件循环的 channel|
+|sectionSize|	索引器会一组一组处理区块头，默认的大小是 4096|
+|confirmReq|	处理完成的 section 之前的确认次数|
+|storedSections|	已经成功进行索引的 section 的数量|
+|knownSections	|已知的 section 数量|
+|cascadedHead	|级联到子索引最后一个完成的 section 的区块数|
+|throttling	|对磁盘的限制，防止大量区块进行索引|
 
 
 构造函数NewChainIndexer, 
@@ -126,7 +147,7 @@ loadValidSections,用来从数据库里面加载我们之前的处理信息， s
 	}
 	
 
-updateLoop,是主要的事件循环，用于调用backend来处理区块链section，这个需要注意的是，所有的主索引节点和所有的 child indexer 都会启动这个goroutine 方法。
+updateLoop,是主要的事件循环，用于调用backend来处理区块链section，这个需要注意的是，所有的主索引节点和所有的 child indexer 都会启动这个goroutine 方法。当已知的 section 数大于存储的 section 数，这时需要开始索引，先通过调用 SectionHead 拿到上一个 section 的最后一个区块的哈希值，接着调用 processSection 开始新 section 的索引。
 	
 	func (c *ChainIndexer) updateLoop() {
 		var (
