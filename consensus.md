@@ -9,7 +9,7 @@ Engine接口定义了共识引擎需要实现的所有函数，实际上按功�
 与区块验证相关联的还有2个外部接口：Processor用于执行交易，而Validator用于验证区块内容和状态。另外，由于需要访问以前的区块链数据，抽象出了一个ChainReader接口，BlockChain和HeaderChain都实现了该接口以完成对数据的访问。
 
 ## 1.区块验证流程
-![image](https://github.com/Billy1900/go-ethereum-code-analysis/blob/master/picture/block-verification-process.png)
+![image](https://github.com/Billy1900/Ethereum-tutorial/blob/master/picture/block-verification-process.png)
 Downloader收到新区块后会调用BlockChain的InsertChain()函数插入新区块。在插入之前需要先要验证区块的有效性，基本分为4个步骤：
 - 验证区块头：调用Ethash.VerifyHeaders()
 - 验证区块内容：调用BlockValidator.VerifyBody()（内部还会调用Ethash.VerifyUncles()）
@@ -18,7 +18,7 @@ Downloader收到新区块后会调用BlockChain的InsertChain()函数插入新�
 如果验证成功，则往数据库中写入区块信息，然后广播ChainHeadEvent事件。
 
 ## 2.区块盖章流程
-![image](https://github.com/Billy1900/go-ethereum-code-analysis/blob/master/picture/block-seal-process.png)
+![image](https://github.com/Billy1900/Ethereum-tutorial/blob/master/picture/block-seal-process.png)
 新产生的区块必须经过“盖章(seal)”才能成为有效区块，具体到Ethash来说，就是要执行POW计算以获得低于设定难度的nonce值。这个其实在之前的挖矿流程分析中已经接触过了，主要分为3个步骤：
 - 准备工作：调用Ethash.Prepare()计算难度值
 - 生成区块：调用Ethash.Finalize()打包新区块
