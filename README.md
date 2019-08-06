@@ -25,8 +25,8 @@
 	- [core/tx_list.go](/core-txlist交易池的一些数据结构源码分析.md)
 	- [core/tx_pool.go](/core-txpool交易池源码分析.md)
 	- [core/genesis.go](/core-genesis创世区块源码分析.md)
-	- [区块链索引 chain_indexer源码分析](/core-chain_indexer源码解析.md)
-	- [布隆过滤器索引 bloombits源码分析](/core-bloombits源码分析.md)
+	- [chain_indexer.go](/core-chain_indexer源码解析.md)
+	- [bloombits源码分析](/core-bloombits源码分析.md)
 	- [statetransition.go & stateprocess.go](/core-state-process源码分析.md)
 	- vm 虚拟机源码分析
 		- [EVM Overview](/EVM-overview.md)
