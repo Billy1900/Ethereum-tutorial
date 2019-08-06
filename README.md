@@ -9,6 +9,7 @@
 - build文件解析： 此文件主要用于编译安装使用
 - [cmd文件解析](/cmd.md)
 - [consensus文件解析](/consensus.md)
+- [miner文件解析](/miner挖矿部分源码分析CPU挖矿.md)
 - [rlp源码解析](/rlp源码解析.md)
 - [trie源码分析](/trie源码分析.md)
 - [ethdb源码分析](/ethdb源码分析.md)
@@ -30,7 +31,6 @@
 		- [虚拟机指令,跳转表,解释器源码分析](/core-vm-jumptable-instruction.md)
 		- [虚拟机源码分析](/core-vm源码分析.md)
 	- [创世区块的源码分析](/core-genesis创世区块源码分析.md)
-- [miner挖矿部分源码分析CPU挖矿](/miner挖矿部分源码分析CPU挖矿.md)
 - [pow一致性算法](/pow一致性算法.md)
 - [以太坊测试网络Clique_PoA介绍](/以太坊测试网络Clique_PoA介绍.md)
 
