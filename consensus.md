@@ -137,6 +137,7 @@ func hashimotoFull(dataset []uint32, hash []byte, nonce uint64) ([]byte, []byte)
 - hashimoto aggregates data from the full dataset in order to produce our final value for a particular header hash and nonce.
 - hashimotoLight aggregates data from the full dataset (using only a small in-memory cache) in order to produce our final value for a particular header hash and nonce.
 - hashimotoFull aggregates data from the full dataset (using the full in-memory dataset) in order to produce our final value for a particular header hash and nonce.
+
 ### 3.3　ethan/api.go
 the purpose is that API exposes ethash related methods for the RPC interface.
 <pre><code>func (api *API) GetWork() ([4]string, error)</code></pre>
