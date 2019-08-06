@@ -1,5 +1,5 @@
 # miner模块
-## agent
+## agent.go
 agent 是具体执行挖矿的对象。 它执行的流程就是，接受计算好了的区块头， 计算mixhash和nonce， 把挖矿好的区块头返回。
 
 构造CpuAgent, 一般情况下不会使用CPU来进行挖矿，一般来说挖矿都是使用的专门的GPU进行挖矿。
@@ -90,7 +90,7 @@ GetHashRate， 这个函数返回当前的HashRate。
 	}
 
 
-## remote_agent
+## remote_agent.go
 remote_agent 提供了一套RPC接口，可以实现远程矿工进行采矿的功能。 比如我有一个矿机，矿机内部没有运行以太坊节点，矿机首先从remote_agent获取当前的任务，然后进行挖矿计算，当挖矿完成后，提交计算结果，完成挖矿。 
 
 数据结构和构造
@@ -261,7 +261,7 @@ SubmitHashrate, 提交hash算力
 	}
 
 
-## unconfirmed
+## unconfirmed.go
 
 unconfirmed是一个数据结构，用来跟踪用户本地的挖矿信息的，比如挖出了一个块，那么等待足够的后续区块确认之后(5个)，再查看本地挖矿的区块是否包含在规范的区块链内部。
 
@@ -930,7 +930,7 @@ wait函数用来接受挖矿的结果然后写入本地区块链，同时通过e
 	}
 
 
-## miner
+## miner.go
 miner用来对worker进行管理， 订阅外部事件，控制worker的启动和停止。
 
 数据结构
