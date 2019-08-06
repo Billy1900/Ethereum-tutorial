@@ -137,6 +137,17 @@ func hashimotoFull(dataset []uint32, hash []byte, nonce uint64) ([]byte, []byte)
 - hashimoto aggregates data from the full dataset in order to produce our final value for a particular header hash and nonce.
 - hashimotoLight aggregates data from the full dataset (using only a small in-memory cache) in order to produce our final value for a particular header hash and nonce.
 - hashimotoFull aggregates data from the full dataset (using the full in-memory dataset) in order to produce our final value for a particular header hash and nonce.
+hashimotoLight 的 lookup 函数不需要一个完整的 dataset，只需要一个占存储空间很小的 cache，然后临时生成一个 dataset，而 hashimotoFull 是直接从 dataset 拿到所需数据。因此 hashimotoLight 可以用于轻量级客户端的验证。hashimotoLight 和 hashimotoFull 最终会调用 hashimoto
+
+hashimoto其流程是
+- 首先，将 hash 和 nonce 合并成一个40 bytes长的数组，取它的 SHA-512 哈希值取名 seed，长度为64 bytes。
+- 然后，将 seed[] 转化成以 uint32 为元素的数组 mix[]，注意一个 uint32 数等于4 bytes，所以 seed[] 只能转化成16个 uint32 数，而 mix[] 数组长度32，所以此时 mix[] 数组前后各半是等值的。
+- 接着，使用 lookup() 函数。用一个循环，不断调用 lookup() 从外部数据集中取出 uint32 元素类型数组，向 mix[] 数组中混入未知的数据。循环的次数可用参数调节，目前设为64次。每次循环中，变化生成参数 index，从而使得每次调用 lookup() 函数取出的数组都各不相同。这里混入数据的方式是一种类似向量『异或』的操作，来自于 FNV 算法。
+- 待混淆数据完成后，得到一个基本上面目全非的 mix[]，长度为32的 uint32 数组。这时，将其折叠(压缩)成一个长度缩小成原长1/4的uint32数组，折叠的操作方法来自于 FNV 算法。
+- 最后，将折叠后的 mix[] 由长度为8的 uint32 型数组直接转化成一个长度32的 byte 数组，这就是返回值 digest；同时将之前的 seed[] 数组与 digest 合并再取一次 SHA-256 哈希值，得到的长度32的 byte 数组，即返回值 result。
+
+经过多次多种哈希运算，hashimoto 返回两个长度均为32的 byte 数组 digest 和 result，前文已提到，在 Ethash 的 mine 方法里，挖矿时需要经过一个死循环，直到找到一个 nonce，使得 hashimoto 返回的 result 和 target 是相等的，这时就表示符合要求，digest 被取 SHA3-256 哈希后也会存到区块头的 MixDigest 字段里，待 Ethash.VerifySeal() 进行验证。
+![image](https://github.com/Billy1900/Ethereum-tutorial/blob/master/picture/hashimoto-flow.png)
 
 ### 3.3　ethan/api.go
 the purpose is that API exposes ethash related methods for the RPC interface.
@@ -444,6 +455,40 @@ func memoryMapAndGenerate(path string, size uint64, generator func(buffer []uint
 Ｌｒｕ是一个ｃａｃｈｅ的存储策略，此处主要是用于优化ｄａｔａｓｅｔ和ｃａｃｈｅ中的存储数据方式</br>
 3)cache块</br>
 具体可以见文件中的注释，具体作用前面也已经说清楚,主要是ｃａｃｈｅ的具体逻辑实现</br>
+<pre><code>func (ethash *Ethash) dataset(block uint64) *dataset {
+	epoch := block / epochLength
+	currentI, futureI := ethash.datasets.get(epoch)
+	current := currentI.(*dataset)
+	current.generate(ethash.config.DatasetDir, ethash.config.DatasetsOnDisk, ethash.config.PowMode == ModeTest)
+	if futureI != nil {
+		future := futureI.(*dataset)
+		go future.generate(ethash.config.DatasetDir, ethash.config.DatasetsOnDisk, ethash.config.PowMode == ModeTest)
+	}
+	return current
+}</code></pre>
+在 consensus/ethash/ethash.go中，dataset 方法对数据集进行了封装。首先尝试从内存中取得，如果不存在则在文件目录中取得，如果还是不存在则通过 func (d *dataset) generate(dir string, limit int, test bool) 生成。具体来说，首先，我们计算 epoch，前面说到，每 30000 个区块就会换 DAG，这里的 30000 也就是 epochLength，也就是说 epoch 不变的的话，DAG 也不需要变。
+<pre><code>func (lru *lru) get(epoch uint64) (item, future interface{}) {
+	lru.mu.Lock()
+	defer lru.mu.Unlock()
+	item, ok := lru.cache.Get(epoch)
+	if !ok {
+		if lru.future > 0 && lru.future == epoch {
+			item = lru.futureItem
+		} else {
+			log.Trace("Requiring new ethash "+lru.what, "epoch", epoch)
+			item = lru.new(epoch)
+		}
+		lru.cache.Add(epoch, item)
+	}
+	if epoch < maxEpoch-1 && lru.future < epoch+1 {
+		log.Trace("Requiring new future ethash "+lru.what, "epoch", epoch+1)
+		future = lru.new(epoch + 1)
+		lru.future = epoch + 1
+		lru.futureItem = future
+	}
+	return item, future
+}</code></pre>
+get 方法会返回两个 interface(实际类型为 dataset)，第一个是当前 epoch 对应的 dataset，第二个值是未来会用到的 dataset（epoch +1），如果不为空，表明需要重新生成，如果为空，表明之前已经生成过了。在<code>func (d *dataset) generate(dir string, limit int, test bool)</code>中，首先通过 csize := cacheSize(d.epoch*epochLength + 1)，dsize := datasetSize(d.epoch*epochLength + 1) 这两个调用得到缓存大小和数据集大小
 4)dataset块</br>
 具体可以见文件中的注释，具体作用前面也已经说清楚，主要是函数的具体逻辑实现</br>
 5)config块</br>
@@ -462,8 +507,16 @@ type Config struct {
 ### 3.6 ethan/sealer.go
 sealer主要是用于最终为ｂｌｏｃｋ打标签，也就是最终的挖矿计算的过程。主要的函数如下：
 <pre><code>func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error </code></pre>
+如果是 fake 模式，立即返回 0 nonce，这部分是为了方便单元测试。
+如果是共享 pow，转到它的共享对象执行 seal 操作。
+接下来通过多个 goroutine 调用 ethash.mine，因此需要上锁，保证缓存的安全。
+Seal 的核心还是在 ethash.mine(block, id, nonce, abort, found) 这一行，
+seal 最后会监听 stop, found, ethash.update 这几个 channel，如果外部意外终止了，停止所有挖矿线程，如果其中有一个线程挖到正确区块，终止其他线程，如果 ethash 对象发生了变化，停止当前所有操作，重新调用 ethash.Seal。
+
 - Seal implements consensus.Engine, attempting to find a nonce that satisfies the block's difficulty requirements.
 <pre><code>func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) </code></pre>
+首先是变量的初始化，从区块头部提取一些数据，得到哈希值，目标值等等，注意 target = new(big.Int).Div(maxUint256, header.Difficulty) 这一行， 难度越高，target 也就越小，也就越难得到正确的结果。接下来 nonse 会初始化为 seed 值，然后进入一个死循环，不断增加 nonce 的值，通过调用 hashimotoFull 算法不断尝试，直到找到正确 nonse，写入到 found 这个 chan 里。
+
 - mine is the actual proof-of-work miner that searches for a nonce starting from seed that results in correct final block difficulty.
 <pre><code>func (ethash *Ethash) remote(notify []string, noverify bool)</code></pre>
 - remote is a standalone goroutine to handle remote mining related stuff.
