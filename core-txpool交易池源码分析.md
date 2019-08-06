@@ -6,14 +6,14 @@ txpool里面的交易分为两种，
 
 从txpool的测试案例来看，txpool主要功能有下面几点。
 
-1. 交易验证的功能，包括余额不足，Gas不足，Nonce太低, value值是合法的，不能为负数。
+1. 交易验证的功能，包括余额不足，Gas不足，Nonce太低, value值是合法的，不能为负数
 2. 能够缓存Nonce比当前本地账号状态高的交易。 存放在queue字段。 如果是能够执行的交易存放在pending字段
-3. 相同用户的相同Nonce的交易只会保留一个GasPrice最大的那个。 其他的插入不成功。
-4. 如果账号没有钱了，那么queue和pending中对应账号的交易会被删除。
-5. 如果账号的余额小于一些交易的额度，那么对应的交易会被删除，同时有效的交易会从pending移动到queue里面。防止被广播。
+3. 相同用户的相同Nonce的交易只会保留一个GasPrice最大的那个。 其他的插入不成功
+4. 如果账号没有钱了，那么queue和pending中对应账号的交易会被删除
+5. 如果账号的余额小于一些交易的额度，那么对应的交易会被删除，同时有效的交易会从pending移动到queue里面。防止被广播
 6. txPool支持一些限制PriceLimit(remove的最低GasPrice限制)，PriceBump(替换相同Nonce的交易的价格的百分比) AccountSlots(每个账户的pending的槽位的最小值) GlobalSlots(全局pending队列的最大值)AccountQueue(每个账户的queueing的槽位的最小值) GlobalQueue(全局queueing的最大值) Lifetime(在queue队列的最长等待时间)
-7. 有限的资源情况下按照GasPrice的优先级进行替换。
-8. 本地的交易会使用journal的功能存放在磁盘上，重启之后会重新导入。 远程的交易不会。
+7. 有限的资源情况下按照GasPrice的优先级进行替换
+8. 本地的交易会使用journal的功能存放在磁盘上，重启之后会重新导入。 远程的交易不会
 
 
 
@@ -58,11 +58,17 @@ txpool里面的交易分为两种，
 	
 		homestead bool  // 家园版本
 	}
+|字段|	描述|
+|---|---|
+|config	|TxPoolConfig 类型，包含了交易池的配置信息，如 PriceLimit，移除交易的最低 GasPrice 限制；PriceBump，替换相同 Nonce 的交易的价格的百分比；AccountSlots，每个账户 pending 的槽位的最小值；GlobalSlots，全局 pending 队列的最大值；AccountQueue，每个账户的 queueing 的槽位的最小值；GlobalQueue，全局 queueing 的最大值；Lifetime，在队列的最长等待时间|
+|chainconfig|	区块链的配置|
+|gasPrice	|最低的 GasPrice 限制|
+|txFeed	|可以通过 txFeed 来订阅 TxPool 的消息|
+|chainHeadCh	|可以通过 chainHeadCh 订阅区块头的消息|
+|signer	|封装了事务签名处理|
 
 
-
-构建
-	
+初始化ｐｏｏｌ
 	
 	// NewTxPool creates a new transaction pool to gather, sort and filter inbound
 	// trnsactions from the network.
@@ -212,6 +218,9 @@ reset代码
 		// promote 升级 
 		pool.promoteExecutables(nil)
 	}
+在 NewTxPool 方法里，如果本地可以发起交易，并且配置的 Journal 目录不为空，那么从指定的目录加载交易日志。NewTxPool 方法的最后会用一个 goroutine 调用
+
+
 addTx 
 	
 	// addTx enqueues a single transaction into the pool if it is valid.
@@ -231,6 +240,7 @@ addTx
 		}
 		return nil
 	}
+addTx 将交易放入交易池中，pool.add(tx, local) 会返回一个 bool 类型，如果为 true，则表明这笔交易合法并且交易之前不存在于交易池，这时候调用 promoteExecutables，可以将可处理的交易变成待处理。所以说，交易池的交易大致分为两种，一种是提交了但还不能执行的，放在 queue 里等待能够被执行（比如 nonce 太高），还有就是等待执行的，放在 pending 里面等待执行。
 
 addTxsLocked
 	
@@ -529,6 +539,12 @@ promoteExecutables方法把 已经变得可以执行的交易从future queue 插
 			}
 		}
 	}
+该方法首先遍历所有当前账户交易，通过 list.Forward 方法迭代当前账户，检查 nonce，如果 nonce 太低，删除该交易。接着通过 list.Filter 方法检查余额不足或 gas 不足的交易，删除不满足的交易。这时得到的所有可执行的交易，通过调用 promoteTx 加入到 pending 里，接着移除超过了限制的交易。对于已经加入到 promoted 的交易，调用 pool.txFeed.Send 将消息发给订阅者，在 eth 协议里，这个交易会被广播出去。
+
+经过上面的处理，pending 的数量可能会超过系统配置的数量，这时需要进行一些处理，移除一些交易。
+
+pending 处理完后，继续处理 future queue，队列里的数量也可能会超过 GlobalQueue 里的数量，根据心跳时间排列所有交易，移除最旧的交易。
+
 
 promoteTx把某个交易加入到pending 队列. 这个方法假设已经获取到了锁.
 
@@ -842,3 +858,14 @@ validateTx 使用一致性规则来检查一个交易是否有效,并采用本�
 		}
 		return nil
 	}
+validateTx 有很多使用 if 语句的条件判断，大致会有如下判断：
+
+- 拒绝大于 32kb 的交易，防止 DDoS 攻击
+- 拒绝转账金额小于0的交易
+- 拒绝 gas 超过交易池 gas 上限的交易
+- 验证这笔交易的签名是否合法
+- 如果交易不是来自本地的，并且 gas 小于当前交易池中的 gas，拒绝这笔交易
+- 当前用户 nonce 如果大于这笔交易的 nonce，拒绝这笔交易
+- 当前账户余额不足，拒绝这笔交易，queue 和 pending 对应账户的交易会被删除
+- 拒绝当前交易固有花费小于交易池 gas 的交易
+判断交易合法后，回到 add 方法，接着判断交易池的容量，如果交易池超过容量了，并且这笔交易的费用低于当前交易池中列表的最小值，拒绝这笔交易；如果这笔交易费用比当前交易池列表最小值高，那么从交易池中移除交易费用最低的交易，为这笔新交易腾出空间，也就是说按照 GasPrice 排出优先级。接着通过调用 Overlaps 通过检查这笔交易的 Nonce 值确认该用户是否已经存在这笔交易，如果已经存在，删除之前的交易，将该交易放入交易池，返回；如果不存在，调用 enqueueTx 将交易放入交易池，如果交易是本地发出的，将发送者保存在交易池的 local 中。注意到 add 方法最后会调用 pool.journalTx(from, tx)。
