@@ -1,3 +1,4 @@
+# core/state
 core/state 包主要为以太坊的state trie提供了一层缓存层(cache)
 
 state的结构主要如下图
@@ -529,7 +530,8 @@ stateDB用来存储以太坊中关于merkle trie的所有内容。 StateDB负责
 	
 		lock sync.Mutex
 	}
-
+其中 stateObjects 用来缓存状态对象，stateObjectsDirty 用来缓存被修改过的对象，这部分代码在 core/state/state_object.go 里。stateObject 主要依赖于 core/state/database.go，core/state/database.go 中的 Database（也是 StateDB 中的 Database） 封装了一下对 MPT 树的操作，可以增删改查世界状态，余额等。
+journal 表示操作日志，core/state/journal.go 针对各种操作日志提供了对应的回滚功能，可以基于这个日志做一些事务类型的操作。
 
 构造函数
 
@@ -551,6 +553,7 @@ stateDB用来存储以太坊中关于merkle trie的所有内容。 StateDB负责
 			preimages:         make(map[common.Hash][]byte),
 		}, nil
 	}
+初始化的时候会利用 OpenTrie 获取 trie，这部分功能由 core/state/database.go 提供，core/state/database.go 封装了与数据库交互的代码
 
 ### 对于Log的处理
 state提供了Log的处理，这比较意外，因为Log实际上是存储在区块链中的，并没有存储在state trie中, state提供Log的处理， 使用了基于下面的几个函数。  奇怪的是暂时没看到如何删除logs里面的信息，如果不删除的话，应该会越积累越多。 TODO logs 删除
