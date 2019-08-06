@@ -2,7 +2,7 @@
 
 clique 主要涉及POA，用于测试网络； ethash主要涉及POW，用于主网络； misc是用于之前DAO分叉的文件。
 下图是consensus文件中各组件的关系图：
-![image](https://github.com/Billy1900/go-ethereum-code-analysis/blob/master/picture/Consensus-architecture.png)
+![image](https://github.com/Billy1900/Ethereum-tutorial/blob/master/picture/Consensus-architecture.png)
 Engine接口定义了共识引擎需要实现的所有函数，实际上按功能可以划分为2类：
 - 区块验证类：以Verify开头，当收到新区块时，需要先验证区块的有效性
 - 区块盖章类：包括Prepare/Finalize/Seal等，用于最终生成有效区块（比如添加工作量证明）
