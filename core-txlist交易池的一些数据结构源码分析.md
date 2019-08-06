@@ -17,7 +17,13 @@ nonceHeap实现了一个heap.Interface的数据结构，用来实现了一个堆
 		Pop() interface{}   //  remove and return element Len() - 1. 移除并返回最后的一个元素
 	}
 
-nonceHeap的代码分析。
+其中 sort.Interface 为：
+<pre><code>type Interface interface {
+	Len() int
+	Less(i, j int) bool
+	Swap(i, j int)
+}</code></pre>
+只需要实现 Len，Less，Swap，Push，Pop 这几个接口就可以实现堆。nonceHeap 实现了一个以 nonce 为基准的堆
 
 	// nonceHeap is a heap.Interface implementation over 64bit unsigned integers for
 	// retrieving sorted transactions from the possibly gapped future queue.
@@ -65,7 +71,9 @@ Put 和 Get, Get用于获取指定nonce的交易， Put用来把交易插入到m
 	func (m *txSortedMap) Get(nonce uint64) *types.Transaction {
 		return m.items[nonce]
 	}
-	
+
+put
+
 	// Put inserts a new transaction into the map, also updating the map's nonce
 	// index. If a transaction already exists with the same nonce, it's overwritten.
 	// 把一个新的事务插入到map中，同时更新map的nonce索引。 如果一个事务已经存在，就把它覆盖。 同时任何缓存的数据会被删除。
@@ -128,7 +136,7 @@ Filter, 删除所有令filter函数调用返回true的交易，并返回那些�
 		return removed
 	}
 
-Cap 对items里面的数量有限制，返回超过限制的所有交易。
+Cap 对items里面的数量有限制，删除超出的交易，重建堆，返回这些被移除的交易。
 	
 	// Cap places a hard limit on the number of items, returning all transactions
 	// exceeding that limit.
@@ -157,7 +165,7 @@ Cap 对items里面的数量有限制，返回超过限制的所有交易。
 		return drops
 	}
 
-Remove
+Remove 根据 nonce 从堆里移除交易，如果没有这个交易返回 false
 	
 	// Remove deletes a transaction from the maintained map, returning whether the
 	// transaction was found.
@@ -181,7 +189,7 @@ Remove
 		return true
 	}
 
-Ready函数	
+Ready 返回从指定 nonce 开始，连续的交易
 	
 	// Ready retrieves a sequentially increasing list of transactions starting at the
 	// provided nonce that is ready for processing. The returned transactions will be
@@ -296,7 +304,8 @@ Forward 删除nonce小于某个值的所有交易。
 		return l.txs.Forward(threshold)
 	}
 
-Filter,
+Filter 方法根据参数 cost 或 gasLimit 的值移除所有比该值更高的交易，被移除的交易会返回以便进一步处理。
+
 	
 	// Filter removes all transactions from the list with a cost or gas limit higher
 	// than the provided thresholds. Every removed transaction is returned for any
