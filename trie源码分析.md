@@ -1,3 +1,5 @@
+# ＭＰＴ
+
 包trie 实现了Merkle Patricia Tries，这里用简称MPT来称呼这种数据结构，这种数据结构实际上是一种Trie树变种，MPT是以太坊中一种非常重要的数据结构，用来存储用户账户的状态及其变更、交易信息、交易的收据信息。MPT实际上是三种数据结构的组合，分别是Trie树， Patricia Trie， 和Merkle树。下面分别介绍这三种数据结构。
 
 ## Trie树 (引用介绍 http://dongxicheng.org/structure/trietree/)
@@ -14,6 +16,17 @@ Trie树的基本性质可以归纳为：
 - 根节点不包含字符，除根节点以外每个节点只包含一个字符。
 - 从根节点到某一个节点，路径上经过的字符连接起来，为该节点对应的字符串。
 - 每个节点的所有子节点包含的字符串不相同。
+
+**应用范围**
+- 字符串检索: Trie 树可以用来查询字符串，判断一个字符串是否存在于某个字符串集合。
+
+- 词频统计: 实现词频统计时，节点结构有一个字段来记录该节点表示的单词的个数。
+
+- 字符串排序: 一次插入字符串到 Trie 树的过程就是一次排序的过程，先序输出 Trie 树的所有关键字就可以得到有序的字符串。
+
+- 前缀匹配: 在搜索引擎中，使用 Trie 前缀可以找到所有以某个字符串为前缀的字符串集合。
+
+Trie 的插入和查询效率都是 O(m)，其中 m 是待插入/查询的字符串的长度。相比于哈希查找，Trie 树中不同的关键字不会产生冲突，而且查询共同前缀的 key 时很高效，如果是使用哈希查找，需要遍历整个哈希表，时间效率为 O(n)，n 为哈希表的数据总数；但 Trie 的缺点是空间消耗比较大，如果是直接查找，效率是 O(m)，并且有 m 次 IO 的开销，对于磁盘的压力也很大，而哈希表的查找效率是 O(1)。
 
 ## Patricia Tries (前缀树)
 前缀树跟Trie树的不同之处在于Trie树给每一个字符串分配一个节点，这样将使那些很长但又没有公共节点的字符串的Trie树退化成数组。在以太坊里面会由黑客构造很多这种节点造成拒绝服务攻击。前缀树的不同之处在于如果节点公共前缀，那么就使用公共前缀，否则就把剩下的所有节点插入同一个节点。Patricia相对Tire的优化正如下图：
@@ -35,12 +48,52 @@ Trie树的基本性质可以归纳为：
 |6c0a8f740d16y03G|43    |
 |6c0a8f740d16vcc1|48    |
 
-## Merkle树 (参考 http://blog.csdn.net/wo541075754/article/details/54632929）
-Merkle Tree，通常也被称作Hash Tree，顾名思义，就是存储hash值的一棵树。Merkle树的叶子是数据块(例如，文件或者文件的集合)的hash值。非叶节点是其对应子节点串联字符串的hash。
+## Merkle Patricia Tree 默克尔-帕特里夏树
+Merkle Patricia Tree 默克尔-帕特里夏树是一种融合了默克尔树和前缀树两种结构优点的，经过改良的数据结构，在以太坊中用来组织交易信息、账户状态及其变更、收据相关的数据，为我们提供一个高效地、易更新的、且代表整个状态树的『指纹』。
+
+每一个以太坊的区块头包含3颗 MPT 树，分别是：
+
+- 交易树 txTrie
+
+用来存储交易数据。路径是 rlp(transactionIndex)，其中 transactionIndex 是挖矿结束后得到的交易索引，在交易执行完后才生成，在挖矿结束后不会再更新。
+- 状态树 stateTrie
+
+世界状态存储的地方，存储了所有账户的信息，包括余额，交易次数，EVM 指令（合约数据）等等，每次交易执行，stateTrie 都会变化，这部分内容我们将在 go-ethereum 源码笔记（core 模块-状态管理） 这一篇进行探讨。路径是 sha3(ethereumAddress)，值是 rlp(ethereumAccount)，其中 ethereumAccount 是一个列表 [nonce,balance,storageRoot,codeHash]，而 storageRoot 是另一个独立的帕特里树，每个账户都有一个独立的帕特里夏树，它用来存储所有的合约数据。参考 Wiki Patricia Tree。
+- 收据树 receiptTrie
+
+路径是 rlp(transactionIndex)，其中 transactionIndex 是挖矿结束后得到的交易索引，在交易执行完后生成，在挖矿结束后不会再更新。
+
+## Merkle树 
+
+默克尔树即哈希树，它是一种树形数据结构，由一组叶结点，一组中间节点和一个根节点构成。最下面的叶结点包含基础数据，每个中间节点是它的子节点的哈希值，根节点是他的子节点的哈希值，表示默克尔树的根部。它的作用是对大容量的数据进行快速比对。对于一个数据集，我们可以将其分成多个小的数据集，存在叶子节点上，默克尔树的根节点存储的哈希值就表示这个数据集的哈希值，当更新、添加或删除树节点时，都需要更新节点的哈希值，根节点的哈希值也会有所不同，这样可以用根节点到数据节点这一路径的数据来证明数据的正确性，而这个数据量相比于整个数据集来说是很小的。
+
+Merkle Tree的主要作用是当我拿到Top Hash的时候，这个hash值代表了整颗树的信息摘要，当树里面任何一个数据发生了变动，都会导致Top Hash的值发生变化。 而Top Hash的值是会存储到区块链的区块头里面去的， 区块头是必须经过工作量证明。 这也就是说我只要拿到一个区块头，就可以对区块信息进行验证。
 
 ![image](picture/trie_3.png)
 
-Merkle Tree的主要作用是当我拿到Top Hash的时候，这个hash值代表了整颗树的信息摘要，当树里面任何一个数据发生了变动，都会导致Top Hash的值发生变化。 而Top Hash的值是会存储到区块链的区块头里面去的， 区块头是必须经过工作量证明。 这也就是说我只要拿到一个区块头，就可以对区块信息进行验证。 更加详细的信息请参考那个博客。有详细的介绍。
+举两个实际的例子，你就能很好的理解默克尔树的作用。
+
+**Dynano 数据库**
+
+在 Amazon 的 Dynamo 数据库中，大量使用到默克尔树。场景是这样的：为了保证 Dynamo 集群中的数据存储的持久性，一台机器上的数据在其他机器上存有备份，也就是副本。副本经常需要同步，保证数据的一致，这时候需要对数据进行比对，找到不一致的地方。网络传输时间是这个过程的瓶颈，我们需要尽可能减少数据传输量。比对两台机器的数据，传输不一致的数据当然是最佳选择，如何比对？首先应该想到的是应该比对哈希值，避免之间传输数据带来的巨大传输量，其次，用二分法能更快的找到差异数据，如果能想到这两点，我们就和 Merkle 想的一样了。在每台机器对每个区间的数据构建默克尔树，比对数据时，从根节点开始比较，如果一致，表明两个副本一致，否则就遍历这颗二叉树，定位到差异数据的复杂度是 O(log(n))
+
+
+**BitTorrent**
+
+BitTorrent 是一种中心索引式的 P2P 文件分析通信协议。进行 P2P 下载时，先从中心索引服务器获取一个扩展名为 torrent 的索引文件，torrent 文件包含了共享文件的信息，包括文件名，大小，文件的 Hash 和指向 Tracker 的 URL，当我们使用 BitTorrent 下载文件时有几个步骤：
+
+客户端 A 根据下载的种子文件得出资源的目标服务器地址，然后与目标服务器地址建立连接，进行数据块下载。
+当一个数据块下载完成后，客户端 A 会计算该数据块的摘要，然后用这个摘要与先前种子文件里的摘要进行对比，如果一致，表示这个数据块下载成功，否则，重新下载。
+当一个数据块下载成功，客户端 A 会与其他下载资源的客户端进行通信，告知它们它已经成功下载了一个数据库，其他客户端需要下载这个数据块时，会去客户端 A 下载。
+如果不采用默克尔树，可以采取 hash list 的方式，即将文件分成一个一个的数据块后，分别对其取 hash，这带来一个问题是，torrent 文件应该是越小越好，否则会对种子文件服务器造成很大的负载压力，要想要 torrent 文件很小，那么数据块就应该分得足够大，但数据块足够大的话，客户端下载完一个数据块后校验发现数据块无效，重新传输代价又很大。引入默克尔树可以解决这个问题，将所有数据块构造成默克尔树之后，种子文件可以只存放根节点的哈希值。当出现传输错误时可以使用二分查找快速找到出错的数据块，然后重新传输，
+
+从上述的两个例子可以看到引入默克尔树的意义，默克尔树将哈希表和二叉树的结合起来，由根节点，中间节点和叶子节点组成，叶子节点存的是数据或哈希值，中间节点是它的两个孩子的哈希值，根节点也是它的两个孩子的哈希值，它表示这一组数据的指纹。根据哈希表和二叉树的特点我们可以知道，叶子节点数据的任何变动，都可以通过父节点体现，而通过二叉树，可以很快定位到变更的数据。
+
+因此，默克尔树的典型应用场景有：
+
+- 快速比较大量数据：如果两个默克尔树的根节点的值相同，意味着它们代表的值相同
+- 可以快速定位到变更的数据，复杂度是 O(log(n))
+- 零知识证明
 
 
 ## 以太坊的MPT
@@ -54,6 +107,19 @@ Merkle Tree的主要作用是当我拿到Top Hash的时候，这个hash值代表
 ![image](picture/trie_4.png)
 详细结构为
 ![world state trie](picture/worldstatetrie.png)
+MPT 在以太坊中作为键值存储的数据结构，使得插入，查找，删除的复杂度为 O(log(n))，并且能获得默克尔树的全部特性。
+
+根据以太坊官方博客所描述的，MPT 使得轻节点可以实现以下的查询：
+
+- 这笔交易被包含在特定的区块中了吗？
+- 这笔交易在过去的30天中，发出 X 类型事件的所有实例(例如，一个众筹合约完成了它的目标)
+- 目前我的账户余额是多少
+- 这个账户是否存在
+- 假设在这个合约中运行这笔交易，它的输出是什么
+
+其实第1种情况可以由交易树处理，第2种情况可以由收据树处理，第3，4，5中情况可以由状态树来处理，计算前4个查询任务相当简单，服务器找到对象，获取默克尔分支，将分支回复给客户端。
+
+对于第5种查询任务，利用状态树实现，这种方式称为默克尔状态转换证明。轻节点想要得到一个可信的结果，这个问题相当于，如果在根 S 的状态树上运行交易 T，其结果状态树将是根为 S’，log 为 L，输出为 O’。为推断这个证明，服务器创建一个假的区块，状态设为 S，请求这笔交易时假装是轻客户端，请求这笔交易时，需要客户端确定一个账户的余额，然后这个假的轻客户端会发出一个余额查询请求，服务器会回应这些请求，也会将这些请求中的数据合并以一个证明的方式发送给轻节点，轻节点这时会进行验证，将服务器提供的证明作为数据库使用，如果客户端验证的结果和服务器提供的是一样的，客户端就接受这个证明。看起来这种方式跟默克尔证明没有本质区别，都很好的利用了默克尔树的特性。
 
 ## 黄皮书形式化定义(Appendix D. Modified Merkle Patricia Tree)
 
@@ -200,7 +266,10 @@ encoding.go主要处理trie树中的三种编码格式的相互转换的工作�
 	}
 
 ### 数据结构
-node的结构，可以看到node分为4种类型， fullNode对应了黄皮书里面的分支节点，shortNode对应了黄皮书里面的扩展节点和叶子节点(通过shortNode.Val的类型来判断当前节点是叶子节点(shortNode.Val为valueNode)还是拓展节点(通过shortNode.Val指向下一个node))。
+node的结构，可以看到node分为4种类型，:
+- fullNode对应了黄皮书里面的分支节点 
+- shortNode对应了黄皮书里面的扩展节点和叶子节点
+- 通过shortNode.Val的类型来判断当前节点是叶子节点(shortNode.Val为valueNode)还是拓展节点(通过shortNode.Val指向下一个node)
 
 	type node interface {
 		fstring(string) string
@@ -241,8 +310,29 @@ trie的结构， root包含了当前的root节点， db是后端的KV存储，tr
 		cachegen, cachelimit uint16
 	}
 
+- fullNode
 
-###Trie树的插入，查找和删除
+fullNode 是一个可以携带多个子节点的节点。它有一个 node 数组类型的成员变量 Children，数组的前16个空位分别对应十六进制的0-9a-f，对于每个子节点，根据其 key 值的十六进制表示一一对应，Children 数组的第17位，fullNode 用来存储数据。
+
+对应黄皮书中的分支节点。
+
+- shortNode
+
+shortNode 是一个仅有一个子节点的节点。成员变量 Val 指向一个子节点，成员变量 Key 是一个由任意长度的字符串，这体现了压缩前缀树的特点，通过合并只有一个子节点的父节点和其子节点来缩短 Trie 的深度。
+
+对应黄皮书里的扩展节点和叶子节点，通过 shortNode.Val 的类型来对应。
+
+- valueNode
+valueNode 在 MPT 结构中存储真正的数据。充当 MPT 的叶子节点，不带子节点。
+
+valueNode 是一个字节数组，但是它实现了 fstring(string) string, cache() (hashNode, bool), canUnload(cachegen, cachelimit uint16) bool 这三个接口（实际上 fullNode，shortNode，hashNode 也实现了这三个接口），因此可以作为 fullNode，shortNode 中的 node 使用。valueNode 可以承接数据，携带的的是数据的 RLP 哈希值，长度为 32 byte，RLP 编码的值存在 LevelDB 里。
+
+- hashNode
+hashNode 是 fullNode 或 shortNode 对象的 RLP 编码的32 byte 的哈希值，表明该节点还没有载入内存。遍历 MPT 时有时会遇到一个 hashNode，表明原来的 node 需要动态加载，hashNode 以 nodeFlag 结构体的成员 hash 的形式存在，如果 fullNode 或 shortNode 的成员变量发生变化，那么就需要更新它的 hashNode，在增删改的过程结束了都会调用 trie.Hash()，整个 MPT 自底向上变量，对所有清空的 hashNode 重新赋值，最终得到根节点的 hashNode，也就是整个 MPT 结构的哈希值。
+
+可以看到 fullNode 体现了 Trie 的特点，shortNode 实现了 PatriciaTrie 的特性（当然也实现了 Trie 的特性），hashNode 既实现了 MPT 节点的动态加载，也实现了默克尔树的功能。
+
+### Trie树的插入，查找和删除
 Trie树的初始化调用New函数，函数接受一个hash值和一个Database参数，如果hash值不是空值的化，就说明是从数据库加载一个已经存在的Trie树， 就调用trei.resolveHash方法来加载整颗Trie树，这个方法后续会介绍。 如果root是空，那么就新建一颗Trie树返回。
 
 	func New(root common.Hash, db Database) (*Trie, error) {
@@ -268,7 +358,7 @@ Trie树的插入，这是一个递归调用的方法，从根节点开始，一�
 - 如果当前节点是hashNode, hashNode的意思是当前节点还没有加载到内存里面来，还是存放在数据库里面，那么首先调用 t.resolveHash(n, prefix)来加载到内存，然后对加载出来的节点调用insert方法来进行插入。
 
 
-插入代码
+插入:
 
 	func (t *Trie) insert(n node, prefix, key []byte, value node) (bool, node, error) {
 		if len(key) == 0 {
@@ -339,8 +429,128 @@ Trie树的插入，这是一个递归调用的方法，从根节点开始，一�
 		}
 	}
 
+参数 node 是当前插入的根节点，prefix 是当前已经处理的 key(即 Patricia 树中节点共有的前缀)，key 是待处理的部分，完整的 key 应该是 prefix + key，value 是需要插入的值。返回的名为 dirty 的布尔值在 commit 阶段指明该树是否需要重新进行哈希计算。
 
-Trie树的Get方法，基本上就是很简单的遍历Trie树，来获取Key的信息。
+如果当前根节点类型为 shortNode(当前节点为叶子节点或扩展节点)，首先通过 prefixLen 方法计算公共前缀。
+
+如果公共前缀长度等于 key 的长度，那么说明插入的 key 和待插入的树的 key 一样，这时分两种情况。
+
+- 如果 value 也一样，那么返回 false，即 dirty 为 false。
+- 如果 value 不一样，实际上这是一个 update 的操作，这时返回的 dirty 为 true。
+- 如果公共前缀不完全匹配，又分两种情况。
+
+如果匹配长度为 0 的话，返回的是一个 fullNode，这个 fullNode 有两个 shortNode 类型的子节点，一个子节点即当前的根节点，另一个为以要插入的值为 node 的 shortNode；
+
+匹配长度大于零，这时公共节点提取出来形成一个独立的 shortNode(扩展节点)，这个 shortNode 的 Val 是 fullNode，fullNode 的两个子节点，一个即当前的根节点，另一个为以要插入的值为 node 的 shortNode
+
+这部分逻辑是当前根节点类型为 shortNode 的情况，可以看到这里实际上是帕特里夏树的体现，对于 Trie 进行空间使用率的优化，如果一个父节点只有一个子节点，那么这个父节点将与其子节点合并，这样可以缩短搜索深度。
+
+对于当前根节点类型为 fullNode 的情况，直接往对应的孩子节点调用 insert 方法，insert 方法会返回插入后的根节点，然后将该孩子指向这个返回的根节点即可。
+
+对于当前根节点类型为 nil 的情况，即要插入的 Trie 是空的，直接返回一个 shortNode，Val 字段即为要插入的 node。
+
+对于当前节点为 hashNode 的情况，表明要插入的当前根节点还在数据库中，没有加载到内存中，首先调用 t.resolveHash(n, prefix) 方法进行加载，在调用 insert 方法进行插入。
+
+以上就是插入一个新节点的全部逻辑，基本上概括了帕特里夏树的特点，删，改，查的操作实际上大同小异
+
+<pre><code>func (t *Trie) Delete(key []byte) {
+	if err := t.TryDelete(key); err != nil {
+		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
+	}
+}
+func (t *Trie) TryDelete(key []byte) error {
+	k := keybytesToHex(key)
+	_, n, err := t.delete(t.root, nil, k)
+	if err != nil {
+		return err
+	}
+	t.root = n
+	return nil
+}
+func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
+	switch n := n.(type) {
+	case *shortNode:
+		matchlen := prefixLen(key, n.Key)
+		if matchlen < len(n.Key) {
+			return false, n, nil
+		}
+		if matchlen == len(key) {
+			return true, nil, nil
+		}
+		dirty, child, err := t.delete(n.Val, append(prefix, key[:len(n.Key)]...), key[len(n.Key):])
+		if !dirty || err != nil {
+			return false, n, err
+		}
+		switch child := child.(type) {
+		case *shortNode:
+			return true, &shortNode{concat(n.Key, child.Key...), child.Val, t.newFlag()}, nil
+		default:
+			return true, &shortNode{n.Key, child, t.newFlag()}, nil
+		}
+	case *fullNode:
+		dirty, nn, err := t.delete(n.Children[key[0]], append(prefix, key[0]), key[1:])
+		if !dirty || err != nil {
+			return false, n, err
+		}
+		n = n.copy()
+		n.flags = t.newFlag()
+		n.Children[key[0]] = nn
+		
+		pos := -1
+		for i, cld := range n.Children {
+			if cld != nil {
+				if pos == -1 {
+					pos = i
+				} else {
+					pos = -2
+					break
+				}
+			}
+		}
+		if pos >= 0 {
+			if pos != 16 {
+				cnode, err := t.resolve(n.Children[pos], prefix)
+				if err != nil {
+					return false, nil, err
+				}
+				if cnode, ok := cnode.(*shortNode); ok {
+					k := append([]byte{byte(pos)}, cnode.Key...)
+					return true, &shortNode{k, cnode.Val, t.newFlag()}, nil
+				}
+			}
+			return true, &shortNode{[]byte{byte(pos)}, n.Children[pos], t.newFlag()}, nil
+		}
+		return true, n, nil
+	case valueNode:
+		return true, nil, nil
+	case nil:
+		return false, nil, nil
+	case hashNode:
+		rn, err := t.resolveHash(n, prefix)
+		if err != nil {
+			return false, nil, err
+		}
+		dirty, nn, err := t.delete(rn, prefix, key)
+		if !dirty || err != nil {
+			return false, rn, err
+		}
+		return true, nn, nil
+	default:
+		panic(fmt.Sprintf("%T: invalid node: %v (%v)", n, n, key))
+	}
+}</code></pre>
+
+删除的真正逻辑在 delete(n node, prefix, key []byte) (bool, node, error) 这个方法里，其中参数 key 是通过 keybytesToHex 获得的 hex 编码。删除的过程也是递归调用，其中 node，prefix，key 参数意义与插入时的参数一致。
+
+对于 shortNode 情况，首先进行 key 的匹配，如果匹配的长度小于根节点的 key 的长度，意味着要删除的节点不在这颗树上，返回 false 以及根节点，不做任何操作；如果匹配的长度正好等于 key 的长度，意味着完全匹配，返回 true 以及 nil(表明该节点已经被删除)。
+
+如果匹配的长度等于根节点的 key 的长度，并且小于参数 key 的长度，那么意味着要删除的节点是该树的子节点，需要删除的是根树的一颗子树，那么继续递归调用。
+
+对于删除 fullNode 的情况，如果 fullNode 删除后有两个及以上的子节点，删除后返回根节点即可，如果删除后只有一个子节点，那么需要将该根节点变成 shortNode 返回。
+
+对于删除 hashNode 的情况，先加载节点到内存中再递归调用删除操作。
+
+查:Trie树的Get方法，基本上就是很简单的遍历Trie树，来获取Key的信息
 
 
 	func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode node, didResolve bool, err error) {
@@ -381,7 +591,7 @@ Trie树的Get方法，基本上就是很简单的遍历Trie树，来获取Key的
 		}
 	}
 
-Trie树的Delete方法，暂时不介绍，代码根插入比较类似
+
 
 ### Trie树的序列化和反序列化
 序列化主要是指把内存表示的数据存放到数据库里面， 反序列化是指把数据库里面的Trie数据加载成内存表示的数据。 序列化的目的主要是方便存储，减少存储大小等。 反序列化的目的是把存储的数据加载到内存，方便Trie树的插入，查询，修改等需求。
@@ -940,3 +1150,56 @@ VerifyProof方法，接收一个rootHash参数，key参数，和proof数组， �
 		}
 		return t.trie.CommitTo(db)
 	}
+
+
+**编码**
+
+前文介绍过分支节点，以太坊想要在效率和存储空间上达到一个平衡，所以 fullNode 只有17个孩子节点，这个值是与16进制有关的，MPT 的 key 值实际上有三种编码方法，Raw 编码，Hex 编码，HP 编码，Raw 编码即原始的字节数组，这种方式的问题是它的一个字节的范围很大，fullNode 的子树这么多会影响检索效率，当树节点需要存储到数据库时，会根据16进制来进行编码，Hex 编码和 HP 编码没本质区别，可以理解为 Hex 编码是存在于内存的中间形式，在以太坊的黄皮书了介绍的是 Hex Prefix Encoding，即 HP 编码。我们一一来看。
+
+- Raw 编码（keybytes encoding）
+原生的 key 字节数组，不做修改，这种方式是 MPT 对外提供 API 的默认方式，如果数据需要插入到树里，Raw 编码需要转换为 Hex 编码。
+
+- Hex 编码（hex encoding）
+Hex 编码用于对内存里的树节点 key 进行编码，当树节点需要持久化到数据库时，Hex 编码被转换为 HP 编码。
+
+具体来说，这个编码的每个字节包含 key 的半个字节，尾部加一个 byte 的『终结符』16，表示这是 hex 格式。节点被加载到内存时 key 使用的是这种编码，因为方便访问。
+
+<pre>
+func keybytesToHex(str []byte) []byte {
+	l := len(str)*2 + 1
+	var nibbles = make([]byte, l)
+	for i, b := range str {
+		nibbles[i*2] = b / 16
+		nibbles[i*2+1] = b % 16
+	}
+	nibbles[l-1] = 16
+	return nibbles
+}</pre>
+
+以上是 Raw 编码转换为 Hex 编码的代码。
+
+- HP 编码（compact encoding）
+全称是 Hex Prefix 编码，hex 编码解决了 key 是 keybytes 形式的数据插入 MPT 的问题，但这种方式有数据冗余的问题，对于 shortNode，目前 hex 格式下的 key，长度会是原来 keybytes 格式下的两倍，这一点对于节点的哈希计算影响很大，compact 编码用于对 hex 格式进行优化。compact encoding 的主要思路是将 Hex 格式字符串先恢复到 keybytes 格式，同时加入当前编码的标记位，表示奇偶不同长度的 hex 格式。
+
+具体来说，compact 编码首先会将 hex 尾部标记的 byte 去掉，然后将原来 hex 编码的包含的 key 的半个字节（称为 nibble）一一合并为1 byte，最后如果 hex 格式编码有效长度为奇数，在头部增加 0011xxxx，其中 xxxx 为第一个 nibble，否则在头部增加 00100000。节点在写入数据库时使用的是 compact 编码，因为可以节约磁盘。
+
+<pre>
+func hexToCompact(hex []byte) []byte {
+	terminator := byte(0)
+	if hasTerm(hex) {
+		terminator = 1
+		hex = hex[:len(hex)-1]
+	}
+	buf := make([]byte, len(hex)/2+1)
+	buf[0] = terminator << 5
+	if len(hex)&1 == 1 {
+		buf[0] |= 1 << 4 
+		buf[0] |= hex[0]
+		hex = hex[1:]
+	}
+	decodeNibbles(hex, buf[1:])
+	return buf
+}</pre>
+
+如果该节点有 value，则 teerminator 为1，其中 buf[0] = terminator << 5 表示，如果是叶子节点，buf[0] 为 00100000，否则为 00000000，接下来的 if len(hex)&1 == 1 if 判断表示 hex 长度为奇数的情况，这时将 buf[0] 赋值为 0011xxxx，其中 xxxx 为 hex[0] 的值，即第一个 nibble 的值，最后调用 decodeNibbles，将两个两个的 nibble 字节合并为一个字节。以上就是 HP 编码的整个过程。
+
