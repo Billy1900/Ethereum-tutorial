@@ -1,4 +1,10 @@
-RLP是Recursive Length Prefix的简写。是以太坊中的序列化方法，以太坊的所有对象都会使用RLP方法序列化为字节数组。这里我希望先从黄皮书来形式化上了解RLP方法， 然后通过代码来分析实际的实现。
+# RLP
+## 定义
+RLP（Recursive Length Prefix）递归长度前缀是一种编码算法，用于编码任意嵌套结构的二进制数据，它是以太坊中数据序列化和反序列化的主要方法，区块、交易等数据结构在持久化时会先经过 RLP 编码再存储到数据库，p2p 网络中节点之间的数据传输也需要 RLP 的编码。
+
+RLP 有两个特点：一个是递归，被编码的数据是递归的结构，编码算法也是递归进行处理的；二是长度前缀，RLP 编码都带有一个前缀，这个前缀与被编码数据长度相关。
+
+根据定义，RLP 编码只处理两类数据：一类是字符串（例如字节数组），一类是列表。字符串指的是一串二进制数据，列表是一个嵌套递归的结构，里面可以包含字符串和列表，例如["cat",["puppy","cow"],"horse",[[]],"pig",[""],"sheep"]就是一个复杂的列表。其他类型的数据需要转成以上的两类。
 
 ## 黄皮书的形式化定义
 我们定义了集合  T。 T由下面的公式进行定义
@@ -31,14 +37,14 @@ RLP是Recursive Length Prefix的简写。是以太坊中的序列化方法，以
 
 对于所有的其他类型(树形结构)， 我们定义如下的处理规则
 
-首先我们对树形结构里面的每一个元素使用RLP处理，然后再把这些结果concat连接起来。
-
+- 首先我们对树形结构里面的每一个元素使用RLP处理，然后再把这些结果concat连接起来。
 - 如果连接后的字节长度小于56， 那么我们就在连接后的结果前面加上(192 + 连接后的长度)，组成最终的结果。
 - 如果连接后的字节长度大于等于56， 那么我们就在连接后的结果前面先加上连接后的长度的大端模式，然后在前面加上(247 + 连接后长度的大端模式的长度)
 
 下面使用公式化的语言来表示， 发现用公式阐述得清楚一点。
 
 ![image](picture/rlp_4.png)
+
 可以看到上面是一个递归的定义， 在求取s(x)的过程中又调用了RLP方法，这样使得RLP能够处理递归的数据结构。
 
 
@@ -553,4 +559,130 @@ Stream的ListEnd方法，如果当前读取的数据数量pos不等于声明的�
 		return nil
 	}
 
+**序列化**
 
+首先看字符串的编码方法。
+<pre><code>
+func writeString(val reflect.Value, w *encbuf) error {
+	s := val.String()
+	if len(s) == 1 && s[0] <= 0x7f {
+		w.str = append(w.str, s[0])
+	} else {
+		w.encodeStringHeader(len(s))
+		w.str = append(w.str, s...)
+	}
+	return nil
+}</code></pre>
+对于字符串，如果只有一个字节，并且字节大小小于128，编码结果是其本身，这对应规则一的第1点。对于第2，第3种情况，调用 encodeStringHeader。
+<pre><code>
+func (w *encbuf) encodeStringHeader(size int) {
+	if size < 56 {
+		w.str = append(w.str, 0x80+byte(size))
+	} else {
+		sizesize := putint(w.sizebuf[1:], uint64(size))
+		w.sizebuf[0] = 0xB7 + byte(sizesize)
+		w.str = append(w.str, w.sizebuf[:sizesize+1]...)
+	}
+}</code></pre>
+如果长度小于56，编码结果是128加上字节数组长度的和作为前缀再加上原始数据，这对应的是第2种情况，如果长度大于等于56，则编码结果是0x87加上原始数据长度的大端表示的长度作为前缀，再加上原始数据长度的大端表示，再加上原始数据，这对应的是第3种情况。
+
+再看树形结构的编码方法。
+
+实际上这里所指的树形结构就是结构体数据。对于普通的类型，例如字符串，整形，布尔型，我们可以直接调用对应的编码方法，往 encbuf 里填充数据，对于结构体类型，我们没法确定其具体结构，但每种类型都实现了 writer 这一类型，即 type writer func(reflect.Value, *encbuf) error，注意到 writer 类型与 func writeString(val reflect.Value, w *encbuf) error 这些编码方法的类型是一致的。因此我们可以用递归的方式解决结构体类型的编码。
+<pre><code>
+func makeStructWriter(typ reflect.Type) (writer, error) {
+	fields, err := structFields(typ)
+	if err != nil {
+		return nil, err
+	}
+	writer := func(val reflect.Value, w *encbuf) error {
+		lh := w.list()
+		for _, f := range fields {
+			if err := f.info.writer(val.Field(f.index), w); err != nil {
+				return err
+			}
+		}
+		w.listEnd(lh)
+		return nil
+	}
+	return writer, nil
+}</code></pre></code></pre>
+首先拿到该结构体的所有字段，然后定义一个 writer 的匿名方法，即 writer func(reflect.Value, *encbuf) error 类型，这个方法可能会被递归调用，在这个方法中，遍历之前通过 structFields 拿到的所有字段，调用对应的 writer 方法，这些结果都会加入到 w(encbuf 类型)中，根据 RLP 编码的定义，需要根据树形结构的长度确定前缀的大小，这是通过 list, listEnd, size, toBytes 等方法实现的。
+
+<pre><code>
+func (w *encbuf) list() *listhead {
+	lh := &listhead{offset: len(w.str), size: w.lhsize}
+	w.lheads = append(w.lheads, lh)
+	return lh
+}
+func (w *encbuf) listEnd(lh *listhead) {
+	lh.size = w.size() - lh.offset - lh.size
+	if lh.size < 56 {
+		w.lhsize += 1
+	} else {
+		w.lhsize += 1 + intsize(uint64(lh.size))
+	}
+}
+func (w *encbuf) size() int {
+	return len(w.str) + w.lhsize
+}
+func (w *encbuf) toBytes() []byte {
+	out := make([]byte, w.size())
+	strpos := 0
+	pos := 0
+	for _, head := range w.lheads {
+		n := copy(out[pos:], w.str[strpos:head.offset])
+		pos += n
+		strpos += n
+		enc := head.encode(out[pos:])
+		pos += len(enc)
+	}
+	copy(out[pos:], w.str[strpos:])
+	return out
+}</code></pre>
+其中 toBytes() 是 encbuf 最后的处理逻辑，返回最终的 RLP 数据。
+
+编码即序列化的整个流程就是这样，解码的过程就不赘述了，相反流程而已，最后看一下 encode 模块暴露的外部方法。
+
+<pre><code>
+func Encode(w io.Writer, val interface{}) error {
+	if outer, ok := w.(*encbuf); ok {
+		return outer.encode(val)
+	}
+	eb := encbufPool.Get().(*encbuf)
+	defer encbufPool.Put(eb)
+	eb.reset()
+	if err := eb.encode(val); err != nil {
+		return err
+	}
+	return eb.toWriter(w)
+}
+func EncodeToBytes(val interface{}) ([]byte, error) {
+	eb := encbufPool.Get().(*encbuf)
+	defer encbufPool.Put(eb)
+	eb.reset()
+	if err := eb.encode(val); err != nil {
+		return nil, err
+	}
+	return eb.toBytes(), nil
+}
+func EncodeToReader(val interface{}) (size int, r io.Reader, err error) {
+	eb := encbufPool.Get().(*encbuf)
+	eb.reset()
+	if err := eb.encode(val); err != nil {
+		return 0, nil, err
+	}
+	return eb.size(), &encReader{buf: eb}, nil
+}</code></pre>
+Encode， EncodeToBytes，EncodeToReader 等方法将值编码到 io.Writer, Bytes, reader 等等，它们有一个共同点，都调用了 encode 这个内部方法。
+
+
+<pre><code>func (w *encbuf) encode(val interface{}) error {
+	rval := reflect.ValueOf(val)
+	ti, err := cachedTypeInfo(rval.Type(), tags{})
+	if err != nil {
+		return err
+	}
+	return ti.writer(rval, w)
+}</code></pre>
+encode 方法会从 cachedTypeInfo 中获得某类型对应的编码器，然后调用 writer 方法，结果就能写到 encbuf 类型中。EncodeToBytes，EncodeToReader 等只是最后调用的方法不一致，如果是调用 toBytes，则返回经过 RLP 编码的字节码数据。
