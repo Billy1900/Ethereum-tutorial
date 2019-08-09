@@ -241,14 +241,7 @@ VerifyHeaders和ＶｅｒｉｆｙＨｅａｄｅｒ实现原理都差不多，�
 - 调用ethash.VerifySeal()检查工作量证明
 - 验证硬分叉相关的数据
 - ethash.VerifySeal()函数，这个函数主要是用来检查工作量证明,用于校验难度的有效性nonce是否小于目标值（解题成功)
-> verifyHeader
->- 校验extra大小
->- 校验区块时间戳，跟当前时间比
->- 校验难度值
->- 校验gaslimit上线
->- 校验区块的总gasuserd小于 gaslimit
->- 校验区块的gaslimit 是在合理范围
->- 特殊的校验，比如dao分叉后的几个块extra里面写了特殊数据，来判断一下
+- 特殊的校验，比如dao分叉后的几个块extra里面写了特殊数据，来判断一下
 
 #### ethan/consensus.go/VerifyUncles()
 这个函数是在BlockValidator.VerifyBody()内部调用的，主要是验证叔块的有效性。
@@ -325,7 +318,7 @@ func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Heade
 }</code></pre>
 根据以太坊的Roadmap，会经历Frontier，Homestead，Metropolis，Serenity这几个大的版本，当前处于Metropolis阶段。Metropolis又分为2个小版本：Byzantium和Constantinople，目前的最新代码版本是Byzantium，因此会调用calcDifficultyByzantium()函数。</br>
 计算难度的公式如下：</br>
-diff = (parent_diff +(parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))) + 2^(periodCount - 2)</br>
+diff = (parent_diff +(parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) / 9), -99))) + 2^(periodCount - 2)</br>
 >- parent_diff ：上一个区块的难度
 >- block_timestamp ：当前块的时间戳
 >- parent_timestamp：上一个块的时间戳
@@ -347,7 +340,7 @@ https://juejin.im/post/59ad6606f265da246f382b88</br>
         fakeBlockNumber = fakeBlockNumber.Sub(parent.Number, big2999999) // Note, parent is 1 less than the actual block number
     }</code></pre>
     
- ###＃ ethash/consensus.go/FinalizeAndAssemble()
+ #### ethash/consensus.go/FinalizeAndAssemble()
 <pre><code>func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
     // Accumulate any block and uncle rewards and commit the final state root
     accumulateRewards(chain.Config(), state, header, uncles)
@@ -357,7 +350,7 @@ https://juejin.im/post/59ad6606f265da246f382b88</br>
 }</code></pre>
 这个挖矿流程是先计算收益，然后生成MPT的Merkle Root，最后创建新区块。
 
-#### ethash/consensus.go/sealer/seal()
+#### ethash/sealer/seal()
 这个函数就是真正执行POW计算的地方了，代码位于consensus/ethash/sealer.go。代码比较长，分段进行分析：
 <pre><code>    abort := make(chan struct{})
     found := make(chan *types.Block)</code></pre>
