@@ -6,10 +6,10 @@
 - [go-ethereum代码阅读环境搭建](/go-ethereum源码阅读环境搭建.md)
 - [以太坊黄皮书 符号索引](a黄皮书里面出现的所有的符号索引.md)
 - [account文件解析](/accounts源码分析.md)
-- common文件：　此文件是提供系统的一些通用的工具集 (utils)
 - build文件解析： 此文件主要用于编译安装使用
 - [cmd文件解析](/cmd.md)
   - [geth](/cmd-geth.md)
+- common文件：　此文件是提供系统的一些通用的工具集 (utils)
 - [consensus文件解析](/consensus.md)
 - [miner文件解析](/miner挖矿部分源码分析CPU挖矿.md)
 - [rlp源码解析](/rlp源码解析.md)
