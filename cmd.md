@@ -1,9 +1,9 @@
 # Cmd 
-## File structure
+## 1. File structure
 |文件|package|说明|
 |-----|----------|-----------------------------------------------------------------------------------|
 |cmd  |	         |命令行工具，下面又分了很多的命令行工具|
-|cmd  |abigen	将智能合约源代码转换成容易使用的，编译时类型安全的Go语言包|
+|cmd  |abigen	|将智能合约源代码转换成容易使用的，编译时类型安全的Go语言包|
 |cmd  |bootnode	 |启动一个仅仅实现网络发现的节点|
 |cmd  | checkpoint-admin|  checkpoint-admin is a utility that can be used to query checkpoint information and register stable checkpoints into an oracle contract.|
 |cmd  |  clef    | Clef is an account management tool|
@@ -19,12 +19,17 @@
 |cmd  |util	 |提供了一些公共的工具,为Go-Ethereum命令提供说明|
 |cmd  |wnode     |这是一个简单的Whisper节点。 它可以用作独立的引导节点。此外，可以用于不同的测试和诊断目的。|
 
-## Cmd/geth
+## 2. Cmd/geth
+### geth/main.go
 geth是ｃｍｄ中最重要的命令，他是以太坊的入口。ｇｅｔｈ的命令行是通过ｕｒｆａｖｅ/cli这个库进行实现的，通过这个库，我们可以轻松定义命令行程序的子命令，命令选项，命令参数，描述信息等等。
 
 geth 模块的入口在 cmd/geth/main.go 中，它会调用 urfave/cli 的中 app 的 run 方法，而 app 在 init 函数中初始化，在 Golang 中，如果有 init 方法，那么会在 main 函数之前执行 init 函数，它用于程序执行前的初始化工作。在 geth 模块中，init() 函数定义了命令行的入口是 geth，并且定义了 geth 的子命令、全局的命令选项、子命令的命令选项，按照 urfave/cli 的做法，不输入子命令会默认调用 geth，而 geth 方法其实就6行：
 <pre><code>func geth(ctx *cli.Context) error {
+	if args := ctx.Args(); len(args) > 0 {
+		return fmt.Errorf("invalid command: %q", args[0])
+	}
 	node := makeFullNode(ctx)
+	defer node.Close()
 	startNode(ctx, node)
 	node.Wait()
 	return nil
@@ -88,7 +93,7 @@ makeConfigNode 会先载入默认配置，再载入配置文件中的配置，�
 	}
 }</code></pre>
 RegisterEthService 的代码在 cmd/utils/flags.go 中，如果同步模式是轻量级同步模式，启动轻量级客户端，否则启动全节点，实际的注册方法是 stack.Register。注入服务其实就是将新的服务注入到 node 对象的 serviceFuncs 数组中。
-### geth/main.go
+
 <pre><code>func startNode(ctx *cli.Context, stack *node.Node) {
 	debug.Memsize.Add("node", stack)
 	utils.StartNode(stack)
@@ -612,6 +617,7 @@ dump 子命令可以移除一个或多个特定的区块,先根据区块号获�
 	return nil
 }</code></pre>
 通过调用 ethash 的 MakeDataset，生成挖矿需要的 DAG 数据集
+
 - versionCommand: 输出版本号
 - bugCommand: 给 https://github.com/ethereum/go-ethereum/issues/new 这个 url 拼接参数，给源代码仓库提一个 issue
 - licenseCommand: 输出 License 信息
