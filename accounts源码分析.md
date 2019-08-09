@@ -1,11 +1,10 @@
 # Account
-accounts包实现了以太坊客户端的钱包和账户管理。以太坊的钱包提供了keyStore, usb,scwallet钱包。同时以太坊合约的ABI的代码也放在了account/abi目录。 
+accounts包实现了以太坊客户端的钱包和账户管理。以太坊的钱包提供了keyStore, usb。同时以太坊合约的ABI的代码也放在了account/abi目录。 
 ## 1. 组件关系
 ![](https://github.com/Billy1900/Ethereum-tutorial/blob/master/picture/accounts.png)
 ## 2. accounts支持的钱包类型
 在accounts中总共支持两大类共4种钱包类型。两大类包括keystore和usbwallet；其中keystore中的私钥存储可以分为加密的和不加密的；usbwallet支持ledger和trenzer两种硬件钱包。
 
-补充：在新版本中加入了scwallet钱包，a usb smart card.
 ### keystore：本地文件夹
 keystore类型的钱包其实是一个本地文件夹目录。在这个目录下可以存放多个文件，每个文件都存储着一个私钥信息。这些文件都是json格式，其中的私钥可以是加密的，也可以是非加密的明文。但非加密的格式已经被废弃了（谁都不想把自己的私钥明文存放在某个文件里）。 keystore的目录路径可以在配置文件中指定，默认路径是<DataDir>/keystore。每一个文件的文件名格式为：UTC--<created_at UTC ISO8601>--<address hex>。例如UTC--2016-03-22T12-57-55-- 7ef5a6135f1fd6a02593eedc869c6d41d934aef8。 keystore目录和目录内的文件是可以直接拷贝的。也就是说，如果你想把某个私钥转移到别的电脑上，你可以直接拷贝文件到其它电脑的keystore目录。拷贝整个keystore目录也是一样的。
 	
@@ -189,61 +188,10 @@ type WalletEvent struct {
 ### hd.go
 hd.go中定义了HD类型的钱包的路径解析等函数。这个文件中的注释还解析了HD路径一些知识，值得一看。（但我认为它关于哪个BIP提案提出的哪个规范说得不对，比如注释中提到BIP-32定义了路径规范m / purpose' / coin_type' / account' / change / address_index，这应该是错误的，我们前面提到过，purpose是在BIP-43中提出的，而整个路径规范是在BIP-44中提出的）
 ### manager.go
-manager.go中定义了Manager结构及其方法。这是accounts模块对外导出的主要的结构和方法之一。其它模块（比如cmd/geth中）通过这个结构体提供的方法对钱包进行管理。
-### url.go
-这个文件中的代码定义了代表以太坊钱包路径的URL结构体及相关函数。与hd.go中不同的是，URL结构体中保存了钱包的类型（scheme）和钱包路径的字符串形式的表示；而hd.go中定义了HD钱包路径的类型（非字符串类型）的解析及字符串转换等方法。</br>
-## keystore
-这是一个子目录，此目录下的代码实现了keystore类型的钱包。
-### account_cache.go
-此文件中的代码实现了accountCache结构体及方法。accountCache的功能是在内存中缓存keystore钱包目录下所有账号信息。无论keystore目录中的文件无何变动（新建、删除、修改），accountCache都可以在扫描目录时将变动更新到内存中。
-### file_cache.go
-此文件中的代码实现了fileCache结构体及相关代码。与account_cache.go类似，file_cache.go中实现了对keystore目录下所有文件的信息的缓存。accountCache就是通过fileCache来获取文件变动的信息，进而得到账号变动信息的。
-### key.go
-key.go主要定义了Key结构体及其json格式的marshal/unmarshal方式。另外这个文件中还定义了通过keyStore接口将Key写入文件中的函数。keyStore接口中定义了Key被写入文件的具体细节，在passphrase.go和plain.go中都有实现。
-### keystore.go
-这个文件里的代码定义了KeyStore结构体及其方法。KeyStore结构体实现了Backend接口，是keystore类型的钱包的后端实现。同时它也实现了keystore类型钱包的大多数功能。
-### passphrase.go
-passphrase.go中定义了keyStorePassphrase结构体及其方法。keyStorePassphrase结构体是对keyStore接口（在key.go文件中）的一种实现方式，它会要求调用者提供一个密码，从而使用aes加密算法加密私钥后，将加密数据写入文件中。
-### plain.go
-这个文件中的代码定义了keyStorePlain结构体及其方法。keyStorePlain与keyStorePassphrase类似，也是对keyStore接口的实现。不同的是，keyStorePlain直接将密码明文存储在文件中。目前这种方式已被标记弃用且整个以太坊项目中都没有调用这个文件里的函数的地方，确实谁也不想将自己的私钥明文存在本地磁盘上。
-### wallet.go
-wallet.go中定义了keystoreWallet结构体及其方法。keystoreWallet是keystore类型的钱包的实现，但其功能基本都是调用KeyStore对象实现的。
-### watch.go
-watch.go中定义了watcher结构体及其方法。watcher用来监控keystore目录下的文件，如果文件发生变化，则立即调用account_cache.go中的代码重新扫描账户信息。但watcher只在某些系统下有效，这是文件的build注释：// +build darwin,!ios freebsd linux,!arm64 netbsd solaris</br>
-## usbwallet
-这是一个子目录，此目录下的代码实现了对通过usb接入的硬件钱包的访问，但只支持ledger和trezor两种类型的硬件钱包。
-### hub.go
-hub.go中定义了Hub结构体及其方法。Hub结构体实现了Backend接口，是usbwallet类型的钱包的后端实现。
-### ledger.go
-ledger.go中定义了ledgerDriver结构体及其方法。ledgerDriver结构体是driver接口的实现，它实现了与ledger类型的硬件钱包通信协议和代码。
-### trezor.go
-trezor.go中定义了trezorDriver结构体及其方法。与ledgerDriver类似，trezorDriver结构体也是driver接口的实现，它实现了与trezor类型的硬件钱包的通信协议和代码。
-### wallet.go
-wallet.go中定义了wallet结构体。wallet结构体实现了Wallet接口，是硬件钱包的具体实现。但它内部其实主要调用硬件钱包的driver实现相关功能。
-## scwallet
-这个文件夹是关于不同account之间的互相安全通信（secure wallet），通过定义会话秘钥、二级秘钥来确保通话双方的信息真实、不被篡改、利用。 尤其是转账信息更不能被利用、被他人打开、和被篡改。
-## backend
-此文件夹是为了和外部的其他账户进行通信
-## abi
-ABI是Application Binary Interface的缩写，字面意思 应用二进制接口，可以通俗的理解为合约的接口说明。当合约被编译后，那么它的abi也就确定了。abi主要是处理智能合约与账户的交互。
-</br>
+manager.go中定义了Manager结构及其方法。这是accounts模块对外导出的主要的结构和方法之一。其它模块（比如cmd/geth中）通过这个结构体提供的方法对钱包进行管理
 
-
-# 数据结构
-
-
-
-
-
-
-
-
-## manager.go
-Manager是一个包含所有东西的账户管理工具。 可以和所有的Backends来通信来签署交易。
-
-数据结构
-
-	// Manager is an overarching account manager that can communicate with various
+**1) Manager struct**
+<pre>// Manager is an overarching account manager that can communicate with various
 	// backends for signing transactions.
 	type Manager struct {
 		// 所有已经注册的Backend
@@ -259,11 +207,10 @@ Manager是一个包含所有东西的账户管理工具。 可以和所有的Bac
 		// 退出队列
 		quit chan chan error
 		lock sync.RWMutex
-	}
-其中 backends 是当前已注册的所有 Backend，updaters 是所有 Backend 的更新订阅器，updates 是 Backend 对应 wallet 事件更新的 chan，wallets 是所有已经注册的 Backends 的钱包的缓存，feed 用于钱包事件的通知，quit 用于退出的事件。manager.go 的代码没有什么很特别的地方，有兴趣的话可以自行查看源代码，这里只做概述。这里只挑几个典型的，下面讲解业务实例时会用到的方法。
+	}</pre>
+其中 backends 是当前已注册的所有 Backend，updaters 是所有 Backend 的更新订阅器，updates 是 Backend 对应 wallet 事件更新的 chan，wallets 是所有已经注册的 Backends 的钱包的缓存，feed 用于钱包事件的通知，quit 用于退出的事件
 
-创建Manager
-
+**2) 创建Manager**
 	
 	// NewManager creates a generic account manager to sign transaction via various
 	// supported backends.
@@ -296,7 +243,9 @@ Manager是一个包含所有东西的账户管理工具。 可以和所有的Bac
 	
 		return am
 	}
-NewManager 会将所有 backends 的 wallets 收集起来，获取所有的 backends 的时间订阅，然后根据这些参数创建新的 manager。
+NewManager 会将所有 backends 的 wallets 收集起来，获取所有的 backends 的时间订阅，然后根据这些参数创建新的 manager
+
+**3) update**
 
 update在 NewManager 作为一个 goroutine 被调用，一直运行，监控所有 backend 触发的更新消息，发给 feed 用来进行进一步的处理。
 
@@ -337,6 +286,8 @@ update在 NewManager 作为一个 goroutine 被调用，一直运行，监控所
 			}
 		}
 	}
+	
+**4) backend**
 
 返回backend
 
@@ -344,7 +295,8 @@ update在 NewManager 作为一个 goroutine 被调用，一直运行，监控所
 	func (am *Manager) Backends(kind reflect.Type) []Backend {
 		return am.backends[kind]
 	}
-
+	
+**5) subscribe**
 
 订阅消息
 
@@ -354,94 +306,82 @@ update在 NewManager 作为一个 goroutine 被调用，一直运行，监控所
 		return am.feed.Subscribe(sink)
 	}
 
+**6) wallets**
+<pre>// Wallets returns all signer accounts registered under this account manager.
+func (am *Manager) Wallets() []Wallet {
+	am.lock.RLock()
+	defer am.lock.RUnlock()
 
-对node来说是什么时候创建的账号管理器
+	cpy := make([]Wallet, len(am.wallets))
+	copy(cpy, am.wallets)
+	return cpy
+}
 
-	// New creates a new P2P node, ready for protocol registration.
-	func New(conf *Config) (*Node, error) {
-		...
-		am, ephemeralKeystore, err := makeAccountManager(conf)
-		
+// Wallet retrieves the wallet associated with a particular URL.
+func (am *Manager) Wallet(url string) (Wallet, error) {
+	am.lock.RLock()
+	defer am.lock.RUnlock()
 
-
-	
-	func makeAccountManager(conf *Config) (*accounts.Manager, string, error) {
-		scryptN := keystore.StandardScryptN
-		scryptP := keystore.StandardScryptP
-		if conf.UseLightweightKDF {
-			scryptN = keystore.LightScryptN
-			scryptP = keystore.LightScryptP
-		}
-	
-		var (
-			keydir    string
-			ephemeral string
-			err       error
-		)
-		switch {
-		case filepath.IsAbs(conf.KeyStoreDir):
-			keydir = conf.KeyStoreDir
-		case conf.DataDir != "":
-			if conf.KeyStoreDir == "" {
-				keydir = filepath.Join(conf.DataDir, datadirDefaultKeyStore)
-			} else {
-				keydir, err = filepath.Abs(conf.KeyStoreDir)
-			}
-		case conf.KeyStoreDir != "":
-			keydir, err = filepath.Abs(conf.KeyStoreDir)
-		default:
-			// There is no datadir.
-			keydir, err = ioutil.TempDir("", "go-ethereum-keystore")
-			ephemeral = keydir
-		}
-		if err != nil {
-			return nil, "", err
-		}
-		if err := os.MkdirAll(keydir, 0700); err != nil {
-			return nil, "", err
-		}
-		// Assemble the account manager and supported backends
-		// 创建了一个KeyStore的backend
-		backends := []accounts.Backend{
-			keystore.NewKeyStore(keydir, scryptN, scryptP),
-		}
-		// 如果是USB钱包。 需要做一些额外的操作。
-		if !conf.NoUSB {
-			// Start a USB hub for Ledger hardware wallets
-			if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
-				log.Warn(fmt.Sprintf("Failed to start Ledger hub, disabling: %v", err))
-			} else {
-				backends = append(backends, ledgerhub)
-			}
-			// Start a USB hub for Trezor hardware wallets
-			if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
-				log.Warn(fmt.Sprintf("Failed to start Trezor hub, disabling: %v", err))
-			} else {
-				backends = append(backends, trezorhub)
-			}
-		}
-		return accounts.NewManager(backends...), ephemeral, nil
-	}
-
-首先获取配置信息，通过 getPassPhrase 获取密码后，通过 keystore.StoreKey 获得账户地址
-<pre><code>
-unc accountCreate(ctx *cli.Context) error {
-	cfg := gethConfig{Node: defaultNodeConfig()}
-	if file := ctx.GlobalString(configFileFlag.Name); file != "" {
-		if err := loadConfig(file, &cfg); err != nil {
-			utils.Fatalf("%v", err)
-		}
-	}
-	utils.SetNodeConfig(ctx, &cfg.Node)
-	scryptN, scryptP, keydir, err := cfg.Node.AccountConfig()
+	parsed, err := parseURL(url)
 	if err != nil {
-		utils.Fatalf("Failed to read configuration: %v", err)
+		return nil, err
 	}
-	password := getPassPhrase("Your new account is locked with a password. Please give a password. Do not forget this password.", true, 0, utils.MakePasswordList(ctx))
-	address, err := keystore.StoreKey(keydir, password, scryptN, scryptP)
-	if err != nil {
-		utils.Fatalf("Failed to create account: %v", err)
+	for _, wallet := range am.Wallets() {
+		if wallet.URL() == parsed {
+			return wallet, nil
+		}
 	}
-	fmt.Printf("Address: {%x}\n", address)
-	return nil
-}</code></pre>
+	return nil, ErrUnknownWallet
+}</pre>
+
+### url.go
+这个文件中的代码定义了代表以太坊钱包路径的URL结构体及相关函数。与hd.go中不同的是，URL结构体中保存了钱包的类型（scheme）和钱包路径的字符串形式的表示；而hd.go中定义了HD钱包路径的类型（非字符串类型）的解析及字符串转换等方法。
+
+### keystore
+这是一个子目录，此目录下的代码实现了keystore类型的钱包。
+- account_cache.go
+
+此文件中的代码实现了accountCache结构体及方法。accountCache的功能是在内存中缓存keystore钱包目录下所有账号信息。无论keystore目录中的文件如何变动（新建、删除、修改），accountCache都可以在扫描目录时将变动更新到内存中。
+- file_cache.go
+
+此文件中的代码实现了fileCache结构体及相关代码。与account_cache.go类似，file_cache.go中实现了对keystore目录下所有文件的信息的缓存。accountCache就是通过fileCache来获取文件变动的信息，进而得到账号变动信息的。
+- key.go
+
+key.go主要定义了Key结构体及其json格式的marshal/unmarshal方式。另外这个文件中还定义了通过keyStore接口将Key写入文件中的函数。keyStore接口中定义了Key被写入文件的具体细节，在passphrase.go和plain.go中都有实现。
+
+- keystore.go
+
+这个文件里的代码定义了KeyStore结构体及其方法。KeyStore结构体实现了Backend接口，是keystore类型的钱包的后端实现。同时它也实现了keystore类型钱包的大多数功能。
+- passphrase.go
+
+passphrase.go中定义了keyStorePassphrase结构体及其方法。keyStorePassphrase结构体是对keyStore接口（在key.go文件中）的一种实现方式，它会要求调用者提供一个密码，从而使用aes加密算法加密私钥后，将加密数据写入文件中。
+- plain.go
+
+这个文件中的代码定义了keyStorePlain结构体及其方法。keyStorePlain与keyStorePassphrase类似，也是对keyStore接口的实现。不同的是，keyStorePlain直接将密码明文存储在文件中。目前这种方式已被标记弃用且整个以太坊项目中都没有调用这个文件里的函数的地方，确实谁也不想将自己的私钥明文存在本地磁盘上。
+- wallet.go
+
+wallet.go中定义了keystoreWallet结构体及其方法。keystoreWallet是keystore类型的钱包的实现，但其功能基本都是调用KeyStore对象实现的。
+- watch.go
+
+watch.go中定义了watcher结构体及其方法。watcher用来监控keystore目录下的文件，如果文件发生变化，则立即调用account_cache.go中的代码重新扫描账户信息。但watcher只在某些系统下有效，这是文件的build注释：// +build darwin,!ios freebsd linux,!arm64 netbsd solaris
+
+### usbwallet
+这是一个子目录，此目录下的代码实现了对通过usb接入的硬件钱包的访问，但只支持ledger和trezor两种类型的硬件钱包。
+- hub.go
+
+hub.go中定义了Hub结构体及其方法。Hub结构体实现了Backend接口，是usbwallet类型的钱包的后端实现。
+- ledger.go
+
+ledger.go中定义了ledgerDriver结构体及其方法。ledgerDriver结构体是driver接口的实现，它实现了与ledger类型的硬件钱包通信协议和代码。
+- trezor.go
+
+trezor.go中定义了trezorDriver结构体及其方法。与ledgerDriver类似，trezorDriver结构体也是driver接口的实现，它实现了与trezor类型的硬件钱包的通信协议和代码。
+- wallet.go
+
+wallet.go中定义了wallet结构体。wallet结构体实现了Wallet接口，是硬件钱包的具体实现。但它内部其实主要调用硬件钱包的driver实现相关功能。
+
+### scwallet
+这个文件夹是关于不同account之间的互相安全通信（secure wallet），通过定义会话秘钥、二级秘钥来确保通话双方的信息真实、不被篡改、利用。 尤其是转账信息更不能被利用、被他人打开、和被篡改。
+
+### abi
+ABI是Application Binary Interface的缩写，字面意思 应用二进制接口，可以通俗的理解为合约的接口说明。当合约被编译后，那么它的abi也就确定了。abi主要是处理智能合约与账户的交互。
