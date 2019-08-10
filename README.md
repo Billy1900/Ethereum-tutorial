@@ -12,7 +12,7 @@
 - common文件：　此文件是提供系统的一些通用的工具集 (utils)
 - [consensus文件解析](/consensus.md)
 - console文件解析：　Console is a JavaScript interpreted runtime environment.
-- [miner文件解析](/miner-module矿.md)
+- [miner文件解析](/miner-module.md)
 - [rlp源码解析](/rlp源码解析.md)
 - [trie源码分析](/trie源码分析.md)
 - [ethdb源码分析](/ethdb源码分析.md)
