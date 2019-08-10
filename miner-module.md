@@ -1,5 +1,5 @@
 # miner模块
-## agent.go
+## agent.go (版本更新过后，这个文件已经被删除）
 agent 是具体执行挖矿的对象。 它执行的流程就是，接受计算好了的区块头， 计算mixhash和nonce， 把挖矿好的区块头返回。
 
 构造CpuAgent, 一般情况下不会使用CPU来进行挖矿，一般来说挖矿都是使用的专门的GPU进行挖矿。
@@ -90,7 +90,7 @@ GetHashRate， 这个函数返回当前的HashRate。
 	}
 
 
-## remote_agent.go
+## remote_agent.go (版本更新过后，这个文件已经被删除）
 remote_agent 提供了一套RPC接口，可以实现远程矿工进行采矿的功能。 比如我有一个矿机，矿机内部没有运行以太坊节点，矿机首先从remote_agent获取当前的任务，然后进行挖矿计算，当挖矿完成后，提交计算结果，完成挖矿。 
 
 数据结构和构造
@@ -375,51 +375,32 @@ Shift方法会删除那些index超过传入的index-depth的区块，并检查�
 	}
 
 ## worker.go
-worker 内部包含了很多agent，可以包含之前提到的agent和remote_agent。 worker同时负责构建区块和对象。同时把任务提供给agent。
 
-数据结构：
 
-Agent接口
-	
-	// Agent can register themself with the worker
-	type Agent interface {
-		Work() chan<- *Work
-		SetReturnCh(chan<- *Result)
-		Stop()
-		Start()
-		GetHashRate() int64
-	}
+environment is the worker's current environment and holds all of the current state information.
+<pre>type environment struct {
+	signer types.Signer
 
-Work结构，Work存储了工作者的当时的环境，并且持有所有的暂时的状态信息。
+	state     *state.StateDB // apply state changes here
+	ancestors mapset.Set     // ancestor set (used for checking uncle parent validity)
+	family    mapset.Set     // family set (used for checking uncle invalidity)
+	uncles    mapset.Set     // uncle set
+	tcount    int            // tx count in cycle
+	gasPool   *core.GasPool  // available gas used to pack transactions
 
-	// Work is the workers current environment and holds
-	// all of the current state information
-	type Work struct {
-		config *params.ChainConfig
-		signer types.Signer			// 签名者
+	header   *types.Header
+	txs      []*types.Transaction
+	receipts []*types.Receipt
+}</pre>
+task contains all information for consensus engine sealing and result submitting.
+<pre>type task struct {
+	receipts  []*types.Receipt
+	state     *state.StateDB
+	block     *types.Block
+	createdAt time.Time
+}</pre>
+worker is the main object which takes care of applying messages to the new state and gathering the sealing result.
 	
-		state     *state.StateDB // apply state changes here 状态数据库
-		ancestors *set.Set       // ancestor set (used for checking uncle parent validity)  祖先集合，用来检查祖先是否有效
-		family    *set.Set       // family set (used for checking uncle invalidity) 家族集合，用来检查祖先的无效性
-		uncles    *set.Set       // uncle set  uncles集合
-		tcount    int            // tx count in cycle 这个周期的交易数量
-	
-		Block *types.Block // the new block  //新的区块
-	
-		header   *types.Header			// 区块头
-		txs      []*types.Transaction   // 交易
-		receipts []*types.Receipt  		// 收据
-	
-		createdAt time.Time 			// 创建时间
-	}
-	
-	type Result struct {  //结果
-		Work  *Work
-		Block *types.Block
-	}
-worker
-	
-	// worker is the main object which takes care of applying messages to the new state
 	// 工作者是负责将消息应用到新状态的主要对象
 	type worker struct {
 		config *params.ChainConfig
@@ -463,9 +444,8 @@ worker
 		atWork int32
 	}
 
-构造
-	
-	func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase common.Address, eth Backend, mux *event.TypeMux) *worker {
+构造newworker
+<pre>func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase common.Address, eth Backend, mux *event.TypeMux) *worker {
 		worker := &worker{
 			config:         config,
 			engine:         engine,
@@ -494,52 +474,110 @@ worker
 		worker.commitNewWork()
 	
 		return worker
-	}
+	}</pre>
 
-worker.update 会监听 ChainHeadEvent，ChainSideEvent，TxPreEvent 3个事件。通过 chainHeadCh, chainSideCh, txCh 这3个 channel 来实现。ChainHeadEvent 事件指的是区块链中已经加入一个新的区块作为链头，这时候 worker 会开始挖掘下一个区块(在代码库中搜索 ChainHeadEvent，可以在 blockchain.go 中的 L1191 看到该事件是怎么触发的)。ChainSideEvent 指区块链中加入了一个新区块作为当前链头的分支，woker 会把这个区块放在 possibleUncles 数组，作为下一个挖掘区块可能的 Uncle 之一。当一个新的交易 tx 被加入 TxPool 中，会触发 TxPreEvent，如果这时 worker 没有在挖矿，那么开始执行，并把 tx 加入到 Work.txs 数组中，下次挖掘新区块可以使用
+worker.mainloop (以前版本是worker.update) 会监听 ChainHeadEvent，ChainSideEvent，TxPreEvent 3个事件。
+
+通过 chainHeadCh, chainSideCh, txCh 这3个 channel 来实现。ChainHeadEvent 事件指的是区块链中已经加入一个新的区块作为链头，这时候 worker 会开始挖掘下一个区块(在代码库中搜索 ChainHeadEvent，可以在 blockchain.go 中的 L1191 看到该事件是怎么触发的)。ChainSideEvent 指区块链中加入了一个新区块作为当前链头的分支，woker 会把这个区块放在 possibleUncles 数组，作为下一个挖掘区块可能的 Uncle 之一。当一个新的交易 tx 被加入 TxPool 中，会触发 TxPreEvent，如果这时 worker 没有在挖矿，那么开始执行，并把 tx 加入到 Work.txs 数组中，下次挖掘新区块可以使用
 	
-	func (self *worker) update() {
-		defer self.txSub.Unsubscribe()
-		defer self.chainHeadSub.Unsubscribe()
-		defer self.chainSideSub.Unsubscribe()
-	
-		for {
-			// A real event arrived, process interesting content
-			select {
-			// Handle ChainHeadEvent 当接收到一个区块头的信息的时候，马上开启挖矿服务。
-			case <-self.chainHeadCh:
-				self.commitNewWork()
-	
-			// Handle ChainSideEvent 接收不在规范的区块链的区块，加入到潜在的叔父集合
-			case ev := <-self.chainSideCh:
-				self.uncleMu.Lock()
-				self.possibleUncles[ev.Block.Hash()] = ev.Block
-				self.uncleMu.Unlock()
-	
-			// Handle TxPreEvent 接收到txPool里面的交易信息的时候。
-			case ev := <-self.txCh:
-				// Apply transaction to the pending state if we're not mining
-				// 如果当前没有挖矿， 那么把交易应用到当前的状态上，以便马上开启挖矿任务。
-				if atomic.LoadInt32(&self.mining) == 0 {
-					self.currentMu.Lock()
-					acc, _ := types.Sender(self.current.signer, ev.Tx)
-					txs := map[common.Address]types.Transactions{acc: {ev.Tx}}
-					txset := types.NewTransactionsByPriceAndNonce(self.current.signer, txs)
-	
-					self.current.commitTransactions(self.mux, txset, self.chain, self.coinbase)
-					self.currentMu.Unlock()
-				}
-	
-			// System stopped
-			case <-self.txSub.Err():
-				return
-			case <-self.chainHeadSub.Err():
-				return
-			case <-self.chainSideSub.Err():
-				return
+	func (w *worker) mainLoop() {
+	defer w.txsSub.Unsubscribe()
+	defer w.chainHeadSub.Unsubscribe()
+	defer w.chainSideSub.Unsubscribe()
+
+	for {
+		select {
+		case req := <-w.newWorkCh:
+			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
+
+		case ev := <-w.chainSideCh:
+			// Short circuit for duplicate side blocks
+			if _, exist := w.localUncles[ev.Block.Hash()]; exist {
+				continue
 			}
+			if _, exist := w.remoteUncles[ev.Block.Hash()]; exist {
+				continue
+			}
+			// Add side block to possible uncle block set depending on the author.
+			if w.isLocalBlock != nil && w.isLocalBlock(ev.Block) {
+				w.localUncles[ev.Block.Hash()] = ev.Block
+			} else {
+				w.remoteUncles[ev.Block.Hash()] = ev.Block
+			}
+			// If our mining block contains less than 2 uncle blocks,
+			// add the new uncle block if valid and regenerate a mining block.
+			if w.isRunning() && w.current != nil && w.current.uncles.Cardinality() < 2 {
+				start := time.Now()
+				if err := w.commitUncle(w.current, ev.Block.Header()); err == nil {
+					var uncles []*types.Header
+					w.current.uncles.Each(func(item interface{}) bool {
+						hash, ok := item.(common.Hash)
+						if !ok {
+							return false
+						}
+						uncle, exist := w.localUncles[hash]
+						if !exist {
+							uncle, exist = w.remoteUncles[hash]
+						}
+						if !exist {
+							return false
+						}
+						uncles = append(uncles, uncle.Header())
+						return false
+					})
+					w.commit(uncles, nil, true, start)
+				}
+			}
+
+		case ev := <-w.txsCh:
+			// Apply transactions to the pending state if we're not mining.
+			//
+			// Note all transactions received may not be continuous with transactions
+			// already included in the current mining block. These transactions will
+			// be automatically eliminated.
+			if !w.isRunning() && w.current != nil {
+				// If block is already full, abort
+				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
+					continue
+				}
+				w.mu.RLock()
+				coinbase := w.coinbase
+				w.mu.RUnlock()
+
+				txs := make(map[common.Address]types.Transactions)
+				for _, tx := range ev.Txs {
+					acc, _ := types.Sender(w.current.signer, tx)
+					txs[acc] = append(txs[acc], tx)
+				}
+				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs)
+				tcount := w.current.tcount
+				w.commitTransactions(txset, coinbase, nil)
+				// Only update the snapshot if any new transactons were added
+				// to the pending block
+				if tcount != w.current.tcount {
+					w.updateSnapshot()
+				}
+			} else {
+				// If clique is running in dev mode(period is 0), disable
+				// advance sealing here.
+				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
+					w.commitNewWork(nil, true, time.Now().Unix())
+				}
+			}
+			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
+
+		// System stopped
+		case <-w.exitCh:
+			return
+		case <-w.txsSub.Err():
+			return
+		case <-w.chainHeadSub.Err():
+			return
+		case <-w.chainSideSub.Err():
+			return
 		}
 	}
+}
 
 worker.wait 执行挖完一个区块后的操作，通过 Result 这个 chan 实现，agent 完成挖矿后，从 chan 中获取 Block 和 Work 对象，Block 会被写到数据库中，加入本地的区块链，成为新的链头。完成这个操作后，会发送一条 NewMinedBlockEvent 事件，其他节点会决定是否接受这个新区块成为区块链新的链头。
 <pre><code>func (self *worker) wait() {
@@ -934,35 +972,39 @@ wait函数用来接受挖矿的结果然后写入本地区块链，同时通过e
 miner用来对worker进行管理， 订阅外部事件，控制worker的启动和停止。
 
 数据结构
+	
+Backend wraps all methods required for mining.
+<pre>type Backend interface {
+	BlockChain() *core.BlockChain
+	TxPool() *core.TxPool
+}</pre>
+Config is the configuration parameters of mining.
+<pre>type Config struct {
+	Etherbase common.Address `toml:",omitempty"` // Public address for block mining rewards (default = first account)
+	Notify    []string       `toml:",omitempty"` // HTTP URL list to be notified of new work packages(only useful in ethash).
+	ExtraData hexutil.Bytes  `toml:",omitempty"` // Block extra data set by the miner
+	GasFloor  uint64         // Target gas floor for mined blocks.
+	GasCeil   uint64         // Target gas ceiling for mined blocks.
+	GasPrice  *big.Int       // Minimum gas price for mining a transaction
+	Recommit  time.Duration  // The time interval for miner to re-create mining work.
+	Noverify  bool           // Disable remote mining solution verification(only useful in ethash).
+}</pre>
+Miner creates blocks and searches for proof-of-work values.
+<pre>type Miner struct {
+	mux      *event.TypeMux
+	worker   *worker
+	coinbase common.Address
+	eth      Backend
+	engine   consensus.Engine
+	exitCh   chan struct{}
 
-	
-	// Backend wraps all methods required for mining.
-	type Backend interface {
-		AccountManager() *accounts.Manager
-		BlockChain() *core.BlockChain
-		TxPool() *core.TxPool
-		ChainDb() ethdb.Database
-	}
-	
-	// Miner creates blocks and searches for proof-of-work values.
-	type Miner struct {
-		mux *event.TypeMux
-	
-		worker *worker
-	
-		coinbase common.Address
-		mining   int32
-		eth      Backend
-		engine   consensus.Engine
-	
-		canStart    int32 // can start indicates whether we can start the mining operation
-		shouldStart int32 // should start indicates whether we should start after sync
-	}
+	canStart    int32 // can start indicates whether we can start the mining operation
+	shouldStart int32 // should start indicates whether we should start after sync
+}</pre>
 
 
-构造, 创建了一个CPU agent 启动了miner的update goroutine
+构造, 创建了一个启动了miner的update goroutine
 
-	
 	func New(eth Backend, config *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine) *Miner {
 		miner := &Miner{
 			eth:      eth,
@@ -1028,3 +1070,112 @@ update订阅了downloader的事件， 注意这个goroutine是一个一次性的
 		self.worker.start()  // 启动worker 开始挖矿
 		self.worker.commitNewWork()  //提交新的挖矿任务。
 	}
+
+## stress_ethash.go
+makeGenesis creates a custom Ethash genesis block based on some pre-defined faucet accounts.
+<pre>func makeGenesis(faucets []*ecdsa.PrivateKey) *core.Genesis {
+	genesis := core.DefaultTestnetGenesisBlock()
+	genesis.Difficulty = params.MinimumDifficulty
+	genesis.GasLimit = 25000000
+
+	genesis.Config.ChainID = big.NewInt(18)
+	genesis.Config.EIP150Hash = common.Hash{}
+
+	genesis.Alloc = core.GenesisAlloc{}
+	for _, faucet := range faucets {
+		genesis.Alloc[crypto.PubkeyToAddress(faucet.PublicKey)] = core.GenesisAccount{
+			Balance: new(big.Int).Exp(big.NewInt(2), big.NewInt(128), nil),
+		}
+	}
+	return genesis
+}</pre>
+makeminer 主要是创建一个miner进行挖矿
+
+func makeMiner(genesis *core.Genesis) (*node.Node, error)
+
+主要的逻辑在main中，这就是挖矿的逻辑：
+
+func main() {
+	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	fdlimit.Raise(2048)
+
+	// Generate a batch of accounts to seal and fund with
+	faucets := make([]*ecdsa.PrivateKey, 128)
+	for i := 0; i < len(faucets); i++ {
+		faucets[i], _ = crypto.GenerateKey()
+	}
+	// Pre-generate the ethash mining DAG so we don't race
+	ethash.MakeDataset(1, filepath.Join(os.Getenv("HOME"), ".ethash"))
+
+	// Create an Ethash network based off of the Ropsten config
+	genesis := makeGenesis(faucets)
+
+	var (
+		nodes  []*node.Node
+		enodes []*enode.Node
+	)
+	for i := 0; i < 4; i++ {
+		// Start the node and wait until it's up
+		node, err := makeMiner(genesis)
+		if err != nil {
+			panic(err)
+		}
+		defer node.Close()
+
+		for node.Server().NodeInfo().Ports.Listener == 0 {
+			time.Sleep(250 * time.Millisecond)
+		}
+		// Connect the node to al the previous ones
+		for _, n := range enodes {
+			node.Server().AddPeer(n)
+		}
+		// Start tracking the node and it's enode
+		nodes = append(nodes, node)
+		enodes = append(enodes, node.Server().Self())
+
+		// Inject the signer key and start sealing with it
+		store := node.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
+		if _, err := store.NewAccount(""); err != nil {
+			panic(err)
+		}
+	}
+	// Iterate over all the nodes and start signing with them
+	time.Sleep(3 * time.Second)
+
+	for _, node := range nodes {
+		var ethereum *eth.Ethereum
+		if err := node.Service(&ethereum); err != nil {
+			panic(err)
+		}
+		if err := ethereum.StartMining(1); err != nil {
+			panic(err)
+		}
+	}
+	time.Sleep(3 * time.Second)
+
+	// Start injecting transactions from the faucets like crazy
+	nonces := make([]uint64, len(faucets))
+	for {
+		index := rand.Intn(len(faucets))
+
+		// Fetch the accessor for the relevant signer
+		var ethereum *eth.Ethereum
+		if err := nodes[index%len(nodes)].Service(&ethereum); err != nil {
+			panic(err)
+		}
+		// Create a self transaction and inject into the pool
+		tx, err := types.SignTx(types.NewTransaction(nonces[index], crypto.PubkeyToAddress(faucets[index].PublicKey), new(big.Int), 21000, big.NewInt(100000000000+rand.Int63n(65536)), nil), types.HomesteadSigner{}, faucets[index])
+		if err != nil {
+			panic(err)
+		}
+		if err := ethereum.TxPool().AddLocal(tx); err != nil {
+			panic(err)
+		}
+		nonces[index]++
+
+		// Wait if we're too saturated
+		if pend, _ := ethereum.TxPool().Stats(); pend > 2048 {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
