@@ -1,5 +1,5 @@
 # Ethereum Tutorial
-本文结合了一些网上资料，加上个人的原创结合而成。个人认为解释的比较清晰。若有疑问，还请及时批评指出。
+本文结合了一些网上资料，加上个人的原创结合而成。若有疑问，还请及时批评指出。
 
 ## 目录
 
@@ -12,13 +12,7 @@
 - common文件：　此文件是提供系统的一些通用的工具集 (utils)
 - [consensus文件解析](/consensus.md)
 - console文件解析：　Console is a JavaScript interpreted runtime environment.
-- [miner文件解析](/miner-module.md)
-- [rlp源码解析](/rlp文件解析.md)
-- [trie源码分析](/trie源码分析.md)
-- [ethdb源码分析](/ethdb源码分析.md)
-- [rpc源码分析](/rpc源码分析.md)
-- [p2p源码分析](/p2p源码分析.md)
-- [eth源码分析](/eth源码分析.md)
+- contract文件： Package checkpointoracle is a an on-chain light client checkpoint oracle about contract.
 - core文件源码分析
 	- [types文件解析](/types.md)
 	- [state文件分析](/core-state源码分析.md)
@@ -35,6 +29,15 @@
 		- [虚拟机堆栈和内存数据结构分析](/core-vm-stack-memory源码分析.md)
 		- [虚拟机指令,跳转表,解释器源码分析](/core-vm-jumptable-instruction.md)
 		- [虚拟机源码分析](/core-vm源码分析.md)
+- crypto文件： 整个system涉及的有关密码学的configuration
+- Dashboard: The dashboard is a data visualizer integrated into geth, intended to collect and visualize useful information of an Ethereum node. It consists of two parts: 1) The client visualizes the collected data. 2) The server collects the data, and updates the clients.
+- [eth源码分析](/eth源码分析.md)
+- [ethdb源码分析](/ethdb源码分析.md)
+- [miner文件解析](/miner-module.md)
+- [p2p源码分析](/p2p源码分析.md)
+- [rlp源码解析](/rlp文件解析.md)
+- [rpc源码分析](/rpc源码分析.md)
+- [trie源码分析](/trie源码分析.md)
 - [pow一致性算法](/pow一致性算法.md)
 - [以太坊测试网络Clique_PoA介绍](/以太坊测试网络Clique_PoA介绍.md)
 
