@@ -1,8 +1,9 @@
-##eth POW分析
-### 共识引擎描述
+## eth POW分析
+本文主要内容在consensus中已经有提及，主要是将整个过程再梳理一遍，是miner与consensus的结合
+### 1. 共识引擎描述
 在CPU挖矿部分，CpuAgent的mine函数，执行挖矿操作的时候调用了self.engine.Seal函数。这里的engine是就是共识引擎。Seal为其中很重要的一个接口。它实现了nonce值的寻找和hash的计算。并且该函数是保证共识并且不能伪造的一个重要的函数。
 再PoW共识算法中，Seal函数实现了工作证明。该部分源码在consensus/ethhash下。
-### 共识引擎接口
+### 2. 共识引擎接口
 type Engine interface {
 	// 获取区块挖掘者, 即coinbase
 	Author(header *types.Header) (common.Address, error)
@@ -39,7 +40,7 @@ type Engine interface {
 	// APIs 返回由共识引擎提供的RPC APIs 
 	APIs(chain ChainReader) []rpc.API
 }
-### ethhash 实现分析
+### 3. ethhash 实现分析
 #### ethhash 结构体
 ```
 type Ethash struct {
