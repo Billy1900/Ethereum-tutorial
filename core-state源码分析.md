@@ -36,6 +36,51 @@ database.go 提供了一个数据库的抽象。
 		CopyTrie(Trie) Trie
 	}
 	
+	// Trie is a Ethereum Merkle Patricia trie.
+        type Trie interface {
+	// GetKey returns the sha3 preimage of a hashed key that was previously used
+	// to store a value.
+	//
+	// TODO(fjl): remove this when SecureTrie is removed
+	GetKey([]byte) []byte
+
+	// TryGet returns the value for key stored in the trie. The value bytes must
+	// not be modified by the caller. If a node was not found in the database, a
+	// trie.MissingNodeError is returned.
+	TryGet(key []byte) ([]byte, error)
+
+	// TryUpdate associates key with value in the trie. If value has length zero, any
+	// existing value is deleted from the trie. The value bytes must not be modified
+	// by the caller while they are stored in the trie. If a node was not found in the
+	// database, a trie.MissingNodeError is returned.
+	TryUpdate(key, value []byte) error
+
+	// TryDelete removes any existing value for key from the trie. If a node was not
+	// found in the database, a trie.MissingNodeError is returned.
+	TryDelete(key []byte) error
+
+	// Hash returns the root hash of the trie. It does not write to the database and
+	// can be used even if the trie doesn't have one.
+	Hash() common.Hash
+
+	// Commit writes all nodes to the trie's memory database, tracking the internal
+	// and external (for account tries) references.
+	Commit(onleaf trie.LeafCallback) (common.Hash, error)
+
+	// NodeIterator returns an iterator that returns nodes of the trie. Iteration
+	// starts at the key after the given start key.
+	NodeIterator(startKey []byte) trie.NodeIterator
+
+	// Prove constructs a Merkle proof for key. The result contains all encoded nodes
+	// on the path to the value at key. The value itself is also included in the last
+	// node and can be retrieved by verifying the proof.
+	//
+	// If the trie does not contain a value for key, the returned proof contains all
+	// nodes of the longest existing prefix of the key (at least the root), ending
+	// with the node that proves the absence of the key.
+	Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWriter) error
+        }
+	
 	// NewDatabase creates a backing store for state. The returned database is safe for
 	// concurrent use and retains cached trie nodes in memory.
 	func NewDatabase(db ethdb.Database) Database {
@@ -128,14 +173,24 @@ cachedTrie的结构和commit方法，commit的时候会调用pushTrie方法把�
 
 ## journal.go
 journal代表了操作日志， 并针对各种操作的日志提供了对应的回滚功能。 可以基于这个日志来做一些事务类型的操作。
+<pre>
+// journalEntry is a modification entry in the state change journal that can be
+// reverted on demand.
+type journalEntry interface {
+	// revert undoes the changes introduced by this journal entry.
+	revert(*StateDB)
 
-类型定义，定义了journalEntry这个接口，提供了undo的功能。 journal 就是journalEntry的列表。
+	// dirtied returns the Ethereum address modified by this journal entry.
+	dirtied() *common.Address
+}
 
-	type journalEntry interface {
-		undo(*StateDB)
-	}
-	
-	type journal []journalEntry
+// journal contains the list of state modifications applied since the last state
+// commit. These are tracked to be able to be reverted in case of an execution
+// exception or revertal request.
+type journal struct {
+	entries []journalEntry         // Current changes tracked by the journal
+	dirties map[common.Address]int // Dirty accounts and the number of changes
+}</pre>
 	
 
 各种不同的日志类型以及undo方法。
@@ -737,5 +792,5 @@ CommitTo用来提交更改。
 
 
 ### 总结
-state包提供了用户和合约的状态管理的功能。 管理了状态和合约的各种状态转换。 cache， trie， 数据库。  日志和回滚功能。
+state包提供了用户和合约的状态管理的功能, 管理了状态和合约的各种状态转换, cache， trie， 数据库, 日志和回滚功能。
 
