@@ -1,6 +1,6 @@
 vm使用了stack.go里面的对象Stack来作为虚拟机的堆栈。memory代表了虚拟机里面使用的内存对象。
 
-## stack
+## stack.go
 比较简单，就是用1024个big.Int的定长数组来作为堆栈的存储。
 
 构造
@@ -69,7 +69,7 @@ require 保证堆栈元素的数量要大于等于n.
 		return nil
 	}
 
-## intpool
+## intpool.go
 非常简单. 就是256大小的 big.int的池,用来加速bit.Int的分配
 	
 	var checkVal = big.NewInt(-42)
@@ -108,7 +108,7 @@ require 保证堆栈元素的数量要大于等于n.
 		}
 	}
 
-## memory
+## memory.go
 
 构造, memory的存储就是byte[]. 还有一个lastGasCost的记录.
 	
@@ -178,7 +178,7 @@ Get来取值, 一个是获取拷贝, 一个是获取指针.
 	}
 
 
-## 一些额外的帮助函数 在stack_table.go里面
+## 一些额外的帮助函数--stack_table.go
 
 	
 	func makeStackFunc(pop, push int) stackValidationFunc {
