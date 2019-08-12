@@ -1,3 +1,4 @@
+# tx pool
 txpool主要用来存放当前提交的等待写入区块的交易，有远端和本地的。
 
 txpool里面的交易分为两种，
@@ -218,8 +219,8 @@ reset代码
 		// promote 升级 
 		pool.promoteExecutables(nil)
 	}
-在 NewTxPool 方法里，如果本地可以发起交易，并且配置的 Journal 目录不为空，那么从指定的目录加载交易日志。NewTxPool 方法的最后会用一个 goroutine 调用
 
+在 NewTxPool 方法里，如果本地可以发起交易，并且配置的 Journal 目录不为空，那么从指定的目录加载交易日志。NewTxPool 方法的最后会用一个 goroutine 调用
 
 addTx 
 	
@@ -869,3 +870,44 @@ validateTx 有很多使用 if 语句的条件判断，大致会有如下判断�
 - 当前账户余额不足，拒绝这笔交易，queue 和 pending 对应账户的交易会被删除
 - 拒绝当前交易固有花费小于交易池 gas 的交易
 判断交易合法后，回到 add 方法，接着判断交易池的容量，如果交易池超过容量了，并且这笔交易的费用低于当前交易池中列表的最小值，拒绝这笔交易；如果这笔交易费用比当前交易池列表最小值高，那么从交易池中移除交易费用最低的交易，为这笔新交易腾出空间，也就是说按照 GasPrice 排出优先级。接着通过调用 Overlaps 通过检查这笔交易的 Nonce 值确认该用户是否已经存在这笔交易，如果已经存在，删除之前的交易，将该交易放入交易池，返回；如果不存在，调用 enqueueTx 将交易放入交易池，如果交易是本地发出的，将发送者保存在交易池的 local 中。注意到 add 方法最后会调用 pool.journalTx(from, tx)。
+
+accountSet
+
+accountSet 就是一个账号的集合和一个处理签名的对象.
+	
+	// accountSet is simply a set of addresses to check for existence, and a signer
+	// capable of deriving addresses from transactions.
+	type accountSet struct {
+		accounts map[common.Address]struct{}
+		signer   types.Signer
+	}
+	
+	// newAccountSet creates a new address set with an associated signer for sender
+	// derivations.
+	func newAccountSet(signer types.Signer) *accountSet {
+		return &accountSet{
+			accounts: make(map[common.Address]struct{}),
+			signer:   signer,
+		}
+	}
+	
+	// contains checks if a given address is contained within the set.
+	func (as *accountSet) contains(addr common.Address) bool {
+		_, exist := as.accounts[addr]
+		return exist
+	}
+	
+	// containsTx checks if the sender of a given tx is within the set. If the sender
+	// cannot be derived, this method returns false.
+	// containsTx检查给定tx的发送者是否在集合内。 如果发件人无法被计算出，则此方法返回false。
+	func (as *accountSet) containsTx(tx *types.Transaction) bool {
+		if addr, err := types.Sender(as.signer, tx); err == nil {
+			return as.contains(addr)
+		}
+		return false
+	}
+	
+	// add inserts a new address into the set to track.
+	func (as *accountSet) add(addr common.Address) {
+		as.accounts[addr] = struct{}{}
+	}
