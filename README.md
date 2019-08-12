@@ -18,7 +18,7 @@
 	- [state文件分析](/core-state源码分析.md)
 	- [core/genesis.go](/core-genesis创世区块源码分析.md)
 	- [core/blockchain.go](/core-blockchain源码分析.md)
-	- [core/tx_list.go](/core-txlist交易池的一些数据结构源码分析.md)
+	- [core/tx_list.go & tx_journal.go](/core-txlist交易池的一些数据结构源码分析.md)
 	- [core/tx_pool.go](/core-txpool交易池源码分析.md)
 	- [chain_indexer.go](/core-chain_indexer源码解析.md)
 	- [bloombits源码分析](/core-bloombits源码分析.md)
