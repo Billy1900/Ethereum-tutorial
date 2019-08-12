@@ -182,7 +182,13 @@ Blockchian structure:
 		return bc, nil
 	}
 	
-BlockChain 的初始化需要 ethdb.Database, *CacheConfig, params.ChainConfig， consensus.Engine，vm.Config 参数。它们分别表示 db 对象；缓存配置（在 core/blockchain.go 中定义）；区块链配置（可通过 core/genesis.go 中的 SetupGenesisBlock 拿到）；一致性引擎（可通过 core/blockchain.go 中的 CreateConsensusEngine 得到）；虚拟机配置（通过 core/vm 定义）这些实参需要提前定义.回到 NewBlockChain 的具体代码，首先判断是否有默认 cacheConfig，如果没有根据默认配置创建 cacheConfig，再通过 hashicorp 公司的 lru 模块创建 bodyCache, bodyRLPCache 等缓存对象（lru 是 last recently used 的缩写，常见数据结构，不了解的朋友请自行查阅相关资料），根据这些信息创建 BlockChain 对象，然后通过调用 BlockChain 的 SetValidator 和 SetProcessor 方法创建验证器和处理器，接下来通过 NewHeaderChain 获得区块头，尝试判断创始区块是否存在，bc.loadLastState() 加载区块最新状态，最后检查当前状态，确保本地运行的区块链上没有非法的区块。
+BlockChain 的初始化需要 ethdb.Database, *CacheConfig, params.ChainConfig， consensus.Engine，vm.Config 参数。它们分别表示 db 对象；
+- 缓存配置（在 core/blockchain.go 中定义）；
+- 区块链配置（可通过 core/genesis.go 中的 SetupGenesisBlock 拿到）；
+- 一致性引擎（可通过 core/blockchain.go 中的 CreateConsensusEngine 得到）；
+- 虚拟机配置（通过 core/vm 定义）这些实参需要提前定义.
+
+回到 NewBlockChain 的具体代码，首先判断是否有默认 cacheConfig，如果没有根据默认配置创建 cacheConfig，再通过 hashicorp 公司的 lru 模块创建 bodyCache, bodyRLPCache 等缓存对象（lru 是 last recently used 的缩写），根据这些信息创建 BlockChain 对象，然后通过调用 BlockChain 的 SetValidator 和 SetProcessor 方法创建验证器和处理器，接下来通过 NewHeaderChain 获得区块头，尝试判断创始区块是否存在，bc.loadLastState() 加载区块最新状态，最后检查当前状态，确保本地运行的区块链上没有非法的区块。
 
 loadLastState, 加载数据库里面的最新的我们知道的区块链状态. 这个方法假设已经获取到锁了.
 	
@@ -246,7 +252,7 @@ loadLastState, 加载数据库里面的最新的我们知道的区块链状态. 
 		return nil
 	}
 
-loadLastState 会从数据库中加载区块链状态，首先通过 GetHeadBlockHash 从数据库中取得当前区块头，如果当前区块不存在，即数据库为空的话，通过 Reset 将创始区块写入数据库以达到重置目的。如果当前区块不存在，同样通过 Reset 重置。接下来确认当前区块的世界状态是否正确;如果有问题，则通过 repair 进行修复，repair 中是一个死循环，它会一直回溯当前区块，直到找到对应的世界状态。然后通过 bc.hc.SetCurrentHeader 设置当前区块头，并恢复快速同步区块。
+loadLastState 会从数据库中加载区块链状态，首先通过 GetHeadBlockHash 从数据库中取得当前区块头，如果当前区块头不存在，即数据库为空的话，通过 Reset 将创始区块写入数据库以达到重置目的。如果当前区块不存在，同样通过 Reset 重置。接下来确认当前区块的世界状态是否正确;如果有问题，则通过 repair 进行修复，repair 中是一个死循环，它会一直回溯当前区块，直到找到对应的世界状态。然后通过 bc.hc.SetCurrentHeader 设置当前区块头，并恢复快速同步区块。
 
 update() 的作用是定时处理 Future 区块，简单地来说就是定时调用 procFutureBlocks。procFutureBlocks 可以从 futureBlocks 拿到需要插入的区块，最终会调用 InsertChain 将区块插入到区块链中。
 	
