@@ -68,16 +68,23 @@ block data stucture:
 	size atomic.Value
 	from atomic.Value
 }
+
 type txdata struct {
 	AccountNonce uint64          `json:"nonce"    gencodec:"required"`
 	Price        *big.Int        `json:"gasPrice" gencodec:"required"`
 	GasLimit     uint64          `json:"gas"      gencodec:"required"`
-	Recipient    *common.Address `json:"to"       rlp:"nil"`
+	Recipient    *common.Address `json:"to"       rlp:"nil"` // nil means contract creation
 	Amount       *big.Int        `json:"value"    gencodec:"required"`
 	Payload      []byte          `json:"input"    gencodec:"required"`
+
+	// Signature values
 	V *big.Int `json:"v" gencodec:"required"`
 	R *big.Int `json:"r" gencodec:"required"`
 	S *big.Int `json:"s" gencodec:"required"`
+
+	// This is only used when marshaling to JSON.
 	Hash *common.Hash `json:"hash" rlp:"-"`
 }</code></pre>
-转账的定义中只有转入方，转出方的地址没有直接暴露。每一笔转账都有独立的 Price 和 GasLimit，这是 Ethereum 的安全保护策略
+转账的定义中只有转入方，转出方的地址没有直接暴露,这是 Ethereum 的安全保护策略
+
+每一笔转账都有独立的 Price 和 GasLimit
