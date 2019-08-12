@@ -1,4 +1,4 @@
-# core/tx_list.go
+# 1. core/tx_list.go
 ## nonceHeap
 nonceHeap实现了一个heap.Interface的数据结构，用来实现了一个堆的数据结构。 在heap.Interface的文档介绍中，默认实现的是最小堆。
 
@@ -572,48 +572,9 @@ Discard,查找一定数量的最便宜的交易,把他们从当前的列表删�
 	}
 
 
-## accountSet
-accountSet 就是一个账号的集合和一个处理签名的对象.
-	
-	// accountSet is simply a set of addresses to check for existence, and a signer
-	// capable of deriving addresses from transactions.
-	type accountSet struct {
-		accounts map[common.Address]struct{}
-		signer   types.Signer
-	}
-	
-	// newAccountSet creates a new address set with an associated signer for sender
-	// derivations.
-	func newAccountSet(signer types.Signer) *accountSet {
-		return &accountSet{
-			accounts: make(map[common.Address]struct{}),
-			signer:   signer,
-		}
-	}
-	
-	// contains checks if a given address is contained within the set.
-	func (as *accountSet) contains(addr common.Address) bool {
-		_, exist := as.accounts[addr]
-		return exist
-	}
-	
-	// containsTx checks if the sender of a given tx is within the set. If the sender
-	// cannot be derived, this method returns false.
-	// containsTx检查给定tx的发送者是否在集合内。 如果发件人无法被计算出，则此方法返回false。
-	func (as *accountSet) containsTx(tx *types.Transaction) bool {
-		if addr, err := types.Sender(as.signer, tx); err == nil {
-			return as.contains(addr)
-		}
-		return false
-	}
-	
-	// add inserts a new address into the set to track.
-	func (as *accountSet) add(addr common.Address) {
-		as.accounts[addr] = struct{}{}
-	}
 
 
-## txJournal
+# 2. txJournal.go
 
 txJournal是交易的一个循环日志，其目的是存储本地创建的事务，以允许未执行的事务在节点重新启动后继续运行。
 结构
