@@ -58,7 +58,7 @@ block data stucture:
 |Extra	|额外数据|
 |MixDigest|	混合哈希，与nonce 结合使用|
 |Nonce	|加密学中的概念|
-ParentHash 表示该区块的父区块哈希，我们通过 ParentHash 这个字段将一个一个区块连接起来组成区块链，但实际上我们并不会直接将链整个的存起来，它是以一定的数据结构一块一块存放的，geth 的底层数据库用的是 LevelDB，这是一个 key-value 数据库，要得到父区块时，我们通过 ParentHash 以及其他字符串组成 key，在 LevelDB 中查询该 key 对应的值，就能拿到父区块。
+|ParentHash |表示该区块的父区块哈希，我们通过 ParentHash 这个字段将一个一个区块连接起来组成区块链，但实际上我们并不会直接将链整个的存起来，它是以一定的数据结构一块一块存放的，geth 的底层数据库用的是 LevelDB，这是一个 key-value 数据库，要得到父区块时，我们通过 ParentHash 以及其他字符串组成 key，在 LevelDB 中查询该 key 对应的值，就能拿到父区块。|
 
 ### core/types/transaction.go
 <pre><code>type Transaction struct {
