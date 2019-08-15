@@ -249,11 +249,9 @@ Context 给 EVM 提供运行合约的上下文信息，
 - 接着利用 StateDB 创建一个快照，如果之后的调用出现问题可以回滚。在进行了这一系列初始化之后，发起一笔转账操作，发送方地址余额减 value 值，合约账户的余额加 value 值，接着通过调用 contract 的 SetCallCode ，根据发送方地址，合约地址，金额 value，gas，合约代码，代码哈希初始化合约对象，
 - 然后调用 run(evm, contract, nil)执行合约的初始化代码，这个生成的代码有一定的长度限制，当合约创建成功，没有错误返回，则计算存储代码所需的 gas，如果没有足够 gas 则进行报错。
 - 之后就是错误处理了，如果存在错误，需要回滚到之前创建的状态快照，没有错误则返回创建成功。可以看到，合约代码通过 state 模块的 SetCode，保存在账户中 codehash 指向的存储区域，这部分的代码都属于对世界状态的修改。
-
-	
+<pre>
 	// Create creates a new contract using code as deployment code.
 	func (evm *EVM) Create(caller ContractRef, code []byte, gas uint64, value *big.Int) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
-	
 		// Depth check execution. Fail if we're trying to execute above the
 		// limit.
 		if evm.depth > int(params.CallCreateDepth) {
@@ -322,7 +320,7 @@ Context 给 EVM 提供运行合约的上下文信息，
 			err = errMaxCodeSizeExceeded
 		}
 		return ret, contractAddr, contract.Gas, err
-	}
+	}</pre>
 
 
 Call方法, 无论我们转账或者是执行合约代码都会调用到这里， 同时合约里面的call指令也会执行到这里。
