@@ -1,8 +1,8 @@
-## scheduler.go
+# scheduler.go
 
-scheduler是基于section的布隆过滤器的单个bit值检索的调度。 除了调度检索操作之外，这个结构还可以对请求进行重复数据删除并缓存结果，从而即使在复杂的过滤情况下也可以将网络/数据库开销降至最低。
+scheduler是基于section的布隆过滤器的单个bit值检索的调度。 除了调度检索操作之外，这个结构还可以对请求进行重复数据删除并缓存结果，从而即使在复杂的过滤情况下也可以将网络/数据库开销降至最低
 
-### 数据结构
+## 数据结构
 request表示一个bloom检索任务，以便优先从本地数据库中或从网络中剪检索。 section 表示区块段号，每段4096个区块， bit代表检索的是布隆过滤器的哪一位(一共有2048位)。这个在之前的(eth-bloombits和filter源码分析.md)中有介绍。
 	
 	// request represents a bloom retrieval task to prioritize and pull from the local
@@ -35,7 +35,7 @@ scheduler
 		lock      sync.Mutex           // Lock protecting the responses from concurrent access
 	}
 
-### 构造函数
+## 构造函数
 newScheduler和reset方法
 
 	// newScheduler creates a new bloom-filter retrieval scheduler for a specific
@@ -62,7 +62,7 @@ newScheduler和reset方法
 	}
 
 
-### 运行 run方法
+## 运行 run方法
 run方法创建了一个流水线， 从sections channel来接收需要请求的sections，通过done channel来按照请求的顺序返回结果。 并发的运行同样的scheduler是可以的，这样会导致任务重复。
 
 	// run creates a retrieval pipeline, receiving section indexes from sections and
@@ -84,7 +84,7 @@ run方法创建了一个流水线， 从sections channel来接收需要请求的
 		go s.scheduleDeliveries(pend, done, quit, wg)
 	}
 
-### scheduler的流程图
+## scheduler的流程图
 
 ![image](picture/chainindexer_2.png)
 图中椭圆代表了goroutine. 矩形代表了channel. 三角形代表外部的方法调用。
@@ -95,7 +95,7 @@ run方法创建了一个流水线， 从sections channel来接收需要请求的
 4. 外部调用deliver方法，把seciton的request请求结果写入response[section].cached.并关闭response[section].done channel
 5. scheduleDelivers接收到response[section].done 信息。 把response[section].cached 发送到done channel
 
-### scheduleRequests
+## scheduleRequests
 	
 	// scheduleRequests reads section retrieval requests from the input channel,
 	// deduplicates the stream and pushes unique retrieval tasks into the distribution
@@ -147,7 +147,7 @@ run方法创建了一个流水线， 从sections channel来接收需要请求的
 
 
 
-## generator.go
+### generator.go
 generator用来产生基于section的布隆过滤器索引数据的对象。 generator内部主要的数据结构是 bloom[2048][4096]bit 的数据结构。  输入是4096个header.logBloom数据。  比如第20个header的logBloom存储在  bloom[0:2048][20]
 
 数据结构：
@@ -221,7 +221,7 @@ Bitset返回
 	}
 	
 
-## matcher.go
+### matcher.go
 Matcher是一个流水线系统的调度器和逻辑匹配器，它们对比特流执行二进制与/或操作，创建一个潜在块的流来检查数据内容。
 
 数据结构
