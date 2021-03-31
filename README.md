@@ -1,6 +1,8 @@
 # Ethereum Tutorial
 本文结合了一些网上资料，加上个人的原创结合而成。若有疑问，还请及时批评指出。
 
+**For the one who is not familliar with Chinese, the English version is published. [link](https://github.com/Billy1900/Ethereum-tutorial-EN)**
+
 ## 目录
 
 - [go-ethereum代码阅读环境搭建](/go-ethereum源码阅读环境搭建.md)
