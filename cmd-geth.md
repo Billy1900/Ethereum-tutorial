@@ -3,7 +3,8 @@
 geth是ｃｍｄ中最重要的命令，他是以太坊的入口。ｇｅｔｈ的命令行是通过ｕｒｆａｖｅ/cli这个库进行实现的，通过这个库，我们可以轻松定义命令行程序的子命令，命令选项，命令参数，描述信息等等。
 
 geth 模块的入口在 cmd/geth/main.go 中，它会调用 urfave/cli 的中 app 的 run 方法，而 app 在 init 函数中初始化，在 Golang 中，如果有 init 方法，那么会在 main 函数之前执行 init 函数，它用于程序执行前的初始化工作。在 geth 模块中，init() 函数定义了命令行的入口是 geth，并且定义了 geth 的子命令、全局的命令选项、子命令的命令选项，按照 urfave/cli 的做法，不输入子命令会默认调用 geth，而 geth 方法其实就6行：
-<pre><code>func geth(ctx *cli.Context) error {
+```go
+func geth(ctx *cli.Context) error {
 	if args := ctx.Args(); len(args) > 0 {
 		return fmt.Errorf("invalid command: %q", args[0])
 	}
@@ -12,9 +13,11 @@ geth 模块的入口在 cmd/geth/main.go 中，它会调用 urfave/cli 的中 ap
 	startNode(ctx, node)
 	node.Wait()
 	return nil
-}</code></pre>
+}
+```
 它会调用 makeFullNode 函数初始化一个全节点，接着通过 startNode 函数启动一个全节点，以阻塞的方式运行，等待着节点被终止。
-<pre><code>func makeFullNode(ctx *cli.Context) *node.Node {
+```go
+func makeFullNode(ctx *cli.Context) *node.Node {
 	stack, cfg := makeConfigNode(ctx)
 	utils.RegisterEthService(stack, &cfg.Eth)
 	if ctx.GlobalBool(utils.DashboardEnabledFlag.Name) {
@@ -23,9 +26,11 @@ geth 模块的入口在 cmd/geth/main.go 中，它会调用 urfave/cli 的中 ap
 	// whether enable whisper ...
 	// whether register eth stats ...
 	return stack
-}</code></pre>
+}
+```
 makeFullNode核心的逻辑是首先通过配置文件和 flag 生成系统级的配置，然后将服务注入到节点。
-<pre><code>func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
+```go
+func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	cfg := gethConfig{
 		Eth:       eth.DefaultConfig,
 		Shh:       whisper.DefaultConfig,
@@ -49,7 +54,8 @@ makeFullNode核心的逻辑是首先通过配置文件和 flag 生成系统级�
 	utils.SetShhConfig(ctx, stack, &cfg.Shh)
 	utils.SetDashboardConfig(ctx, &cfg.Dashboard)
 	return stack, cfg
-}</code></pre>
+}
+```
 makeConfigNode 会先载入默认配置，再载入配置文件中的配置，然后通过上下文的配置(在 cmd/geth/main.go 中的 init 方法中定义)进行设置。
 <pre><code>func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 	var err error
